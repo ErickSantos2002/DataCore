@@ -1,0 +1,67 @@
+@import "../design-system/styles.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+@layer base {
+  :root {
+    --chart-text: #000000;
+    --chart-axis: #475569;
+
+    /* ── Medalhas de bonificação ──────────────────────────────────────
+     * Bronze, prata e ouro são os três degraus de PL da Meta do trimestre.
+     * Não são decoração: são o vocabulário do negócio, e quem olha a tela
+     * lê a cor antes de ler o número. Trocar por uma escada semântica
+     * (âmbar → azul → verde) apagaria essa informação.
+     *
+     * Moram AQUI, e não em design-system/tokens/, porque são cor de
+     * DOMÍNIO deste produto — o Design System não tem (nem deve ter)
+     * token de medalha, e tokens/ é cópia verbatim, não se edita.
+     *
+     * Tom do design (docs/DataCoreHS.html): #CD7F32 / #C0C0C0 / #FFD700.
+     * Esses três valem no ESCURO, onde contrastam de 5,08:1 a 11,40:1
+     * contra o --surface do card. No CLARO eles afundam — #FFD700 sobre
+     * branco dá 1,40:1 e o arco de ouro some. Elemento gráfico precisa de
+     * 3:1, então o tema claro usa o mesmo metal escurecido: mesma matiz e
+     * mesma saturação, só o brilho abaixa. Ouro continua ouro (matiz 47°,
+     * sat. 93%), prata continua prata (cinza NEUTRO, sat. 0% — os cinzas
+     * de texto do sistema são slate azulado, então prata não se confunde
+     * com eles), bronze continua bronze (matiz 30°, sat. 79%). */
+    --medalha-bronze: #b26b26; /* 4,18:1 sobre --surface (#ffffff) */
+    --medalha-prata: #8a8a8a; /*  3,45:1 sobre --surface (#ffffff) */
+    --medalha-ouro: #a8850b; /*   3,49:1 sobre --surface (#ffffff) */
+  }
+
+  .dark {
+    --chart-text: #e2e8f0;
+    --chart-axis: #94a3b8;
+
+    /* Os tons do design, sem retoque: contra o --surface navy (#132238)
+     * eles já passam com folga — 5,08:1, 8,79:1 e 11,40:1. */
+    --medalha-bronze: #cd7f32; /* 5,08:1 sobre --surface (#132238) */
+    --medalha-prata: #c0c0c0; /*  8,79:1 sobre --surface (#132238) */
+    --medalha-ouro: #ffd700; /*  11,40:1 sobre --surface (#132238) */
+  }
+
+  a {
+    color: var(--text-link);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--text-link-hover);
+    text-decoration: underline;
+  }
+}
+
+@layer components {
+  .input-cc {
+    @apply w-full rounded-lg border border-borda bg-surface px-3 py-2 text-sm text-conteudo outline-none transition-all focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-focus;
+  }
+}

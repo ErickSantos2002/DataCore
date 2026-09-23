@@ -1,0 +1,24 @@
+dist
+node_modules
+package-lock.json
+
+# `src/design-system` é cópia verbatim do Health & Safety Design System (ver
+# ORIGEM.md): reformatar ali faria o próximo sync divergir por espaço em
+# branco. É a isenção permanente, e há teste travando esta linha
+# (`src/test/prettierignore.test.ts`).
+src/design-system
+
+# A lista já foi longa. Da Fase 0 até 15/09/2026 ela tinha `src/pages`,
+# `src/components`, `src/context`, `src/services`, `src/hooks`, `docs` e o
+# `index.html`: formatar uma tela ANTES de migrá-la afogaria o diff da
+# migração em espaço em branco, então cada tela saía daqui ao ser migrada.
+# Com a Fase 3 concluída, o resto saiu de uma vez em 16/09/2026, e
+# `prettier --check .` passou a ficar limpo.
+#
+# O que sobra são os quatro arquivos da OUTRA FRENTE de trabalho: formatar
+# arquivo de outra sessão vira colisão de diff sem ninguém ter mudado lógica.
+# Eles saem quando aquela frente quiser.
+src/pages/comercial/useComercial.ts
+src/pages/comercial/hooksFalsos.ts
+src/pages/servicos/useServicos.ts
+src/pages/servicos/hooksFalsos.ts

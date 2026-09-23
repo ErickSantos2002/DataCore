@@ -1,0 +1,23 @@
+# Substitui os dois gatilhos do fluxo `[DATACORE] Puxar_Notas` (4h e 15h UTC), mais a
+# carga da tarde acrescentada em 2026-09-19.
+#
+# POR QUE A DAS 17:30 UTC (14:30 em Brasilia): o pessoal da empresa abre o sistema por
+# volta das 15h para ver se a meta subiu. Ate aqui isso nao funcionava — a carga das
+# 15:00 UTC (12:00 no Brasil) enchia o bronze, mas NADA reconstruia o gold depois dela,
+# entao a tela mostrava o faturamento congelado no dbt das 05:00 UTC (02:00 no Brasil).
+# Quem olhava as 15h via o numero da madrugada.
+#
+# Medido em 19/09 (90 dias de notas com hora): 49% saem de manha e 51% a tarde. A carga
+# das 14:30 pega o dia inteiro ate ali; o que sair depois entra na madrugada seguinte.
+[Unit]
+Description=Carga de notas fiscais do Tiny (3x ao dia)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+OnCalendar=*-*-* 15:00:00 UTC
+OnCalendar=*-*-* 17:30:00 UTC
+Persistent=true
+Unit=tiny-extrator@extrair_notas.service
+
+[Install]
+WantedBy=timers.target

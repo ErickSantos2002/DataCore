@@ -1,0 +1,27 @@
+# Dev local: backend e frontend apontando um pro outro. Produção NÃO usa este
+# arquivo — é o EasyPanel, um serviço por pasta.
+# O backend lê backend/.env (DATABASE_URL, SECRET_KEY...). Ver backend/.env.example.
+services:
+  backend:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file: ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_URL: http://localhost:8000/auth
+      VITE_NOTAS_URL: http://localhost:8000
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend

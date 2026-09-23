@@ -1,0 +1,19 @@
+# Postgres descartável para a suíte de testes. Nada aqui persiste (tmpfs).
+# Subir:  docker compose -f docker-compose.test.yml up -d --wait
+services:
+  pg-teste:
+    image: postgres:18
+    container_name: tiny-integrador-pg-teste
+    environment:
+      POSTGRES_USER: teste
+      POSTGRES_PASSWORD: teste
+      POSTGRES_DB: tiny_teste
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teste -d tiny_teste"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

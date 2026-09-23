@@ -1,0 +1,24 @@
+# Importação diária das NFS-e emitidas (ADN nacional). Até 2026-09-11 não tinha agendamento
+# nenhum: dependia de alguém chamar `POST /notas_servico/importar`, e ninguém chamava.
+#
+# Usa o mesmo template dos extratores do Tiny. O nome do template fala em Tiny, mas ele só
+# roda `python -m app.jobs.<instância>` no container da API — serve para qualquer job.
+#
+# Por que 04:30 UTC: depois da carga de notas das 04:00 (leva ~3 min) e ANTES do dbt das
+# 05:00, então o gold de serviços amanhece com as notas da véspera. A importação leva ~20s.
+#
+# E por que 17:35 UTC (14:35 no Brasil), acrescentada em 2026-09-19: o faturamento que a
+# tela mostra é NF-e **mais** NFS-e. Sem esta, a atualização da tarde deixaria o número
+# pela metade. Cinco minutos depois da carga de notas, que leva ~3,5 min — os dois batem
+# em APIs diferentes, mas escalonar evita dois jobs no mesmo container ao mesmo tempo.
+[Unit]
+Description=Importação das NFS-e emitidas (ADN nacional)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00 UTC
+OnCalendar=*-*-* 17:35:00 UTC
+Persistent=true
+Unit=tiny-extrator@importar_nfse.service
+
+[Install]
+WantedBy=timers.target

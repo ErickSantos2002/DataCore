@@ -1,0 +1,31 @@
+# Segredos — em qualquer pasta
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.pfx
+acme.json
+
+# Sessões do Claude: SETUP-CLAUDE.md já carregou string de conexão
+SETUP-CLAUDE.md
+.claude/
+.superpowers/
+
+# Dados — repo público
+*.xlsx
+*.jsonl
+*.dump
+*.sql.gz
+backups/
+
+# Gerados
+node_modules/
+dist/
+.venv/
+__pycache__/
+brag-output/
+
+# Mockup do design, fora do versionamento (decisão pendente)
+frontend/docs/DataCoreHS.html

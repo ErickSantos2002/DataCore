@@ -1,0 +1,51 @@
+from sqlalchemy import text, Column, Integer, String, Date, Numeric, DateTime, SmallInteger, CHAR, Text
+from app.models.database import Base
+
+
+class ContasPagar(Base):
+    __tablename__ = "contas_pagar"
+    __table_args__ = {"schema": "tiny"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_tiny = Column(Integer, unique=True, nullable=False)
+    data_emissao = Column(Date, nullable=False)
+    vencimento = Column(Date, nullable=False)
+    competencia = Column(Date, nullable=True)
+    valor = Column(Numeric(15, 2), nullable=False)
+    saldo = Column(Numeric(15, 2), nullable=False)
+    nro_documento = Column(String(30), nullable=True)
+    historico = Column(String(300), nullable=True)
+    categoria = Column(String(100), nullable=True)
+    situacao = Column(String(50), nullable=True)
+    ocorrencia = Column(CHAR(1), nullable=False)
+    dia_vencimento = Column(SmallInteger, nullable=True)
+    numero_parcelas = Column(SmallInteger, nullable=True)
+    dia_semana_vencimento = Column(SmallInteger, nullable=True)
+    cliente_codigo = Column(String(30), nullable=True)
+    cliente_nome = Column(String(150), nullable=False)
+    cliente_tipo_pessoa = Column(CHAR(1), nullable=True)
+    cliente_cpf_cnpj = Column(String(18), nullable=True)
+    cliente_ie = Column(String(18), nullable=True)
+    cliente_rg = Column(String(10), nullable=True)
+    cliente_fone = Column(String(40), nullable=True)
+    cliente_email = Column(String(150), nullable=True)
+    cliente_endereco = Column(String(150), nullable=True)
+    # texto livre na origem ("SEM NUMERO", "NAO INFORMADO"): ver migration 004
+    cliente_numero = Column(String(60), nullable=True)
+    cliente_complemento = Column(String(150), nullable=True)
+    cliente_bairro = Column(String(100), nullable=True)
+    cliente_cep = Column(String(10), nullable=True)
+    cliente_cidade = Column(String(100), nullable=True)
+    cliente_uf = Column(CHAR(2), nullable=True)
+    cliente_pais = Column(String(100), nullable=True)
+    liquidacao = Column(Date, nullable=True)
+    # O DEFAULT existe na tabela desde o n8n, mas o SQLAlchemy manda NULL explícito
+    # para coluna mapeada sem valor — e NULL explícito desliga o DEFAULT. Declarar o
+    # `server_default` aqui é o que faz o ORM OMITIR a coluna do INSERT e o banco
+    # carimbar a hora. Sem isso, 7.648 linhas do backfill de 2026-09-05 nasceram sem
+    # data de carga e cegaram o `freshness` do dbt (item 0.13 do roadmap).
+    created_at = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(DateTime, nullable=True)
+    # NULL = existe no Tiny. Preenchido = a origem responde "não localizada"
+    # (codigo_erro 32), quase sempre porque a conta atrasou e foi reemitida.
+    excluida_na_origem_em = Column(DateTime, nullable=True)

@@ -1,0 +1,16 @@
+from .nota_fiscal import router as nota_fiscal
+from .nota_servico import router as nota_servico
+from .cliente import router as cliente
+from .item_nota import router as item_nota
+from .endereco_entrega import router as endereco_entrega
+from .forma_envio import router as forma_envio
+from .marcador import router as marcador
+from .configuracoes import router as configuracoes
+from .estoque import router as estoque
+from .contas_pagar import router as contas_pagar
+from .contas_receber import router as contas_receber
+from .centro_custo import router as centro_custo
+from .operacao import router as operacao
+from .faturamento import router as faturamento
+from .comercial import router as comercial
+from .auth import router as auth

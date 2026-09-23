@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+dist-ssr/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
+ALEX_AGENT_MAPPING.md
+.superpowers/
+
+# Saída do /brag (vídeo, composição e assets) — não versionar
+brag-output/
+
+# Utilitários pontuais e dados exportados — não versionar. Os dois scripts
+# chegaram a carregar a credencial do banco (ver o histórico de 01/09), e a
+# planilha é venda real da empresa, num repositório público.
+/gerar_planilha_2025.js
+/migrar_cc.js
+/vendas_2025.xlsx
+*.xlsx
+
+# Onde o Traefik guarda a chave privada dos certificados do Let's Encrypt. A
+# pasta traefik/ fica: o dockerfile copia o nginx.conf dela para a imagem.
+/traefik/acme.json
