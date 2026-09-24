@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "./AuthContext";
 import { useAuth } from "../hooks/useAuth";
+import api from "../services/api";
 import { criarHttp } from "../services/http";
 
 /**
@@ -133,5 +134,106 @@ describe("sessao expirada no AuthContext", () => {
     ).toBeInTheDocument();
     expect(localStorage.getItem("access_token")).toBeNull();
     expect(localStorage.getItem("id")).toBeNull();
+  });
+});
+
+describe("entrarComToken", () => {
+  function Entrar({
+    token,
+    aoFalhar,
+  }: {
+    token: string;
+    aoFalhar?: (e: unknown) => void;
+  }) {
+    const { entrarComToken, user } = useAuth();
+    return (
+      <>
+        <button
+          onClick={() => entrarComToken(token).catch((e) => aoFalhar?.(e))}
+        >
+          entrar
+        </button>
+        <p>
+          {user ? `Logado como ${user.username} (${user.role})` : "Sem sessão"}
+        </p>
+      </>
+    );
+  }
+
+  it("busca o /me com o token e grava a sessao inteira", async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { id: 26, username: "rickelme", role: { id: 1, name: "admin" } },
+    });
+    render(
+      <AuthProvider>
+        <Entrar token="tok-sso" />
+      </AuthProvider>,
+    );
+
+    await act(async () => {
+      screen.getByText("entrar").click();
+    });
+
+    expect(api.get).toHaveBeenCalledWith("/me", {
+      headers: { Authorization: "Bearer tok-sso" },
+    });
+    expect(
+      screen.getByText("Logado como rickelme (admin)"),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem("access_token")).toBe("tok-sso");
+    expect(localStorage.getItem("id")).toBe("26");
+    expect(localStorage.getItem("username")).toBe("rickelme");
+    expect(localStorage.getItem("role")).toBe("admin");
+  });
+
+  it("se o /me falha, nao deixa sessao pela metade e rejeita", async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new AxiosError("boom"));
+    const aoFalhar = vi.fn();
+    render(
+      <AuthProvider>
+        <Entrar token="tok-sso" aoFalhar={aoFalhar} />
+      </AuthProvider>,
+    );
+
+    await act(async () => {
+      screen.getByText("entrar").click();
+    });
+
+    expect(aoFalhar).toHaveBeenCalledOnce();
+    expect(screen.getByText("Sem sessão")).toBeInTheDocument();
+    expect(localStorage.getItem("access_token")).toBeNull();
+  });
+
+  it("o login com senha continua indo por POST /login e depois /me", async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { access_token: "tok-senha" },
+    });
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { id: 1, username: "erick", role: { id: 1, name: "admin" } },
+    });
+    function Logar() {
+      const { login, user } = useAuth();
+      return (
+        <>
+          <button onClick={() => login("erick", "x")}>logar</button>
+          <p>{user ? `Logado como ${user.username}` : "Sem sessão"}</p>
+        </>
+      );
+    }
+    render(
+      <AuthProvider>
+        <Logar />
+      </AuthProvider>,
+    );
+
+    await act(async () => {
+      screen.getByText("logar").click();
+    });
+
+    expect(api.post).toHaveBeenCalledWith("/login", {
+      username: "erick",
+      password: "x",
+    });
+    expect(screen.getByText("Logado como erick")).toBeInTheDocument();
   });
 });

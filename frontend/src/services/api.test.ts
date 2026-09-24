@@ -1,7 +1,13 @@
 import axios from "axios";
 import type { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import authApi, { URL_PADRAO_DA_AUTENTICACAO, updateUserPassword } from "./api";
+import authApi, {
+  URL_LOGIN_MICROSOFT,
+  URL_PADRAO_DA_AUTENTICACAO,
+  ssoAtivo,
+  trocarTicket,
+  updateUserPassword,
+} from "./api";
 
 /**
  * Espião de transporte instalado nos DOIS caminhos possíveis: a instância
@@ -68,5 +74,67 @@ describe("endereco da API de autenticacao", () => {
     expect(URL_PADRAO_DA_AUTENTICACAO).toBe(
       "https://tinyapi.healthsafetytech.com/auth",
     );
+  });
+});
+
+describe("login com Microsoft", () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("a URL do botao e a /microsoft da base da autenticacao", () => {
+    expect(URL_LOGIN_MICROSOFT).toBe(`${authApi.defaults.baseURL}/microsoft`);
+  });
+
+  it("ssoAtivo le GET /sso/status", async () => {
+    const capturadas: string[] = [];
+    authApi.defaults.adapter = async (config) => {
+      capturadas.push(`${config.method} ${config.url}`);
+      return {
+        data: { ativo: true },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+    await expect(ssoAtivo()).resolves.toBe(true);
+    expect(capturadas).toEqual(["get /sso/status"]);
+  });
+
+  it("ssoAtivo responde false quando o backend falha, sem rejeitar", async () => {
+    authApi.defaults.adapter = async () => {
+      throw new Error("rede caiu");
+    };
+    await expect(ssoAtivo()).resolves.toBe(false);
+  });
+
+  it("ssoAtivo so aceita true de verdade", async () => {
+    authApi.defaults.adapter = async (config) => ({
+      data: { ativo: "sim" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    });
+    await expect(ssoAtivo()).resolves.toBe(false);
+  });
+
+  it("trocarTicket manda POST /sso/exchange e devolve o access_token", async () => {
+    const capturadas: InternalAxiosRequestConfig[] = [];
+    authApi.defaults.adapter = async (config) => {
+      capturadas.push(config);
+      return {
+        data: { access_token: "tok-sso" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+    await expect(trocarTicket("tic-1")).resolves.toBe("tok-sso");
+    expect(capturadas[0].method).toBe("post");
+    expect(capturadas[0].url).toBe("/sso/exchange");
+    expect(JSON.parse(String(capturadas[0].data))).toEqual({ ticket: "tic-1" });
   });
 });

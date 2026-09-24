@@ -7,6 +7,8 @@ type AuthContextType = {
   token: string | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
+  /** Grava a sessao de um token ja emitido (login por senha ou por Microsoft). */
+  entrarComToken: (accessToken: string) => Promise<void>;
   logout: () => void;
   error: string | null;
 };
@@ -53,6 +55,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Um caminho só para abrir sessão: o login por senha e a volta da Microsoft
+  // passam por aqui. Falhou no meio (o /me caiu)? Limpa tudo e rejeita —
+  // sessão pela metade é pior que sessão nenhuma.
+  const entrarComToken = async (accessToken: string) => {
+    try {
+      localStorage.setItem("access_token", accessToken);
+      setToken(accessToken);
+
+      const me = await api.get("/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const { id, username: userNameFromAPI, role } = me.data;
+      const roleName = typeof role === "string" ? role : role?.name || "";
+
+      localStorage.setItem("id", id.toString());
+      localStorage.setItem("username", userNameFromAPI);
+      localStorage.setItem("role", roleName);
+
+      setUser({ id, username: userNameFromAPI, role: roleName });
+    } catch (erro) {
+      limparSessao();
+      setToken(null);
+      setUser(null);
+      throw erro;
+    }
+  };
+
   // Função de login
   const login = async (username: string, password: string) => {
     setLoading(true);
@@ -61,26 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const res = await api.post("/login", { username, password });
       const { access_token } = res.data;
-
-      // salva token
-      localStorage.setItem("access_token", access_token);
-      setToken(access_token);
-
-      // busca dados do usuário logado
-      const me = await api.get("/me", {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-
-      const { id, username: userNameFromAPI, role } = me.data;
-      const roleName = typeof role === "string" ? role : role?.name || "";
-
-      // salva no localStorage
-      localStorage.setItem("id", id.toString());
-      localStorage.setItem("username", userNameFromAPI);
-      localStorage.setItem("role", roleName);
-
-      // atualiza state
-      setUser({ id, username: userNameFromAPI, role: roleName });
+      await entrarComToken(access_token);
     } catch (err: any) {
       // 🧠 Aqui tratamos os erros HTTP
       if (err.response) {
@@ -127,7 +138,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, logout, error }}
+      value={{ user, token, loading, login, entrarComToken, logout, error }}
     >
       {children}
     </AuthContext.Provider>

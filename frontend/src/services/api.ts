@@ -15,6 +15,35 @@ const baseURL = import.meta.env.VITE_API_URL || URL_PADRAO_DA_AUTENTICACAO;
 // O interceptor do token vem de criarHttp, compartilhado entre os dois.
 const authApi = criarHttp(baseURL);
 
+// ── Login com Microsoft ──────────────────────────────────────────────────────
+//
+// O botao NAVEGA para esta URL (window.location), nao chama por axios: o backend
+// responde com redirect para a Microsoft, em outro dominio.
+export const URL_LOGIN_MICROSOFT = `${baseURL}/microsoft`;
+
+/** Uma funcao, e nao `window.location` solto no componente: o teste simula esta. */
+export function irParaLoginMicrosoft(): void {
+  window.location.assign(URL_LOGIN_MICROSOFT);
+}
+
+/** Se o botao aparece. Qualquer falha vira `false`: o login por senha segue. */
+export async function ssoAtivo(): Promise<boolean> {
+  try {
+    const res = await authApi.get<{ ativo: unknown }>("/sso/status");
+    return res.data.ativo === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Troca o ticket de uso unico da volta da Microsoft pelo token de sessao. */
+export async function trocarTicket(ticket: string): Promise<string> {
+  const res = await authApi.post<{ access_token: string }>("/sso/exchange", {
+    ticket,
+  });
+  return res.data.access_token;
+}
+
 // ── Tipos ────────────────────────────────────────────────────────────────────
 //
 // Derivados do que a tela de Usuarios de fato le de cada resposta. Onde o
