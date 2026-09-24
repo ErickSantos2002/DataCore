@@ -1,10 +1,12 @@
-import threading
+import logging
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from app.core import microsoft
+from sqlalchemy.exc import OperationalError
+
+from app.core import microsoft, sso_tickets
 from app.core.config import settings
 
 FRONT = "https://front.teste"
@@ -95,7 +97,9 @@ def test_inicio_com_sso_desligado_manda_de_volta_ao_login(client, monkeypatch):
 
 
 def test_inicio_sem_nada_configurado_responde_404(client):
-    assert client.get("/auth/microsoft", follow_redirects=False).status_code == 404
+    r = client.get("/auth/microsoft", follow_redirects=False)
+    assert r.status_code == 404
+    assert r.json()["detail"] == "Login com Microsoft não configurado."
 
 
 # ---------- callback ----------
@@ -133,8 +137,12 @@ def test_cancelar_na_microsoft(client, sso):
     assert _erro(_callback(client, code=None, error="access_denied")) == "cancelado"
 
 
-def test_outro_erro_da_microsoft(client, sso):
-    assert _erro(_callback(client, code=None, error="server_error")) == "falha_microsoft"
+def test_outro_erro_da_microsoft(client, sso, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.auth"):
+        assert _erro(_callback(client, code=None, error="server_error")) == "falha_microsoft"
+    assert any(
+        r.levelno == logging.WARNING and "server_error" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_sem_code(client, sso):
@@ -151,6 +159,28 @@ def test_email_sem_usuario(client, sso, criar_usuario, email):
     criar_usuario("maria", email="maria@healthsafetytech.com")
     sso.email = email
     assert _erro(_callback(client)) == "usuario_nao_encontrado"
+
+
+def test_email_sem_usuario_loga_como_warning(client, sso, caplog):
+    # INFO não aparece em produção (o logger app.auth não tem handler).
+    sso.email = "ninguem@healthsafetytech.com"
+    with caplog.at_level(logging.WARNING, logger="app.auth"):
+        assert _erro(_callback(client)) == "usuario_nao_encontrado"
+    assert any(
+        r.levelno == logging.WARNING and "ninguem@healthsafetytech.com" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_falha_ao_gravar_o_ticket_volta_ao_login_sem_500(client, sso, criar_usuario, monkeypatch):
+    # Ex.: API no ar antes da migration 0002.
+    criar_usuario("maria", email="maria@healthsafetytech.com")
+
+    def quebrar(db, usuario_id):
+        raise OperationalError("INSERT", {}, Exception("relation does not exist"))
+
+    monkeypatch.setattr(sso_tickets, "emitir", quebrar)
+    assert _erro(_callback(client)) == "falha_microsoft"
 
 
 def test_callback_com_sso_desligado(client, monkeypatch):

@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core import microsoft, sso_tickets
@@ -16,7 +16,6 @@ from app.core.security import (
     gerar_hash_senha,
     logger,
     usuario_atual,
-    usuario_do_token,
     verificar_senha,
 )
 from app.models.database import SessionLocal
@@ -255,8 +254,11 @@ def _resultado_do_callback(
     if not state or not guardado or not secrets.compare_digest(state.encode(), guardado.encode()):
         return _erro_sso("state_invalido")
 
+    if error == "access_denied":
+        return _erro_sso("cancelado")
     if error:
-        return _erro_sso("cancelado" if error == "access_denied" else "falha_microsoft")
+        logger.warning("Login com Microsoft: a Microsoft devolveu error=%r", error)
+        return _erro_sso("falha_microsoft")
     if not code:
         return _erro_sso("falha_microsoft")
 
@@ -272,10 +274,16 @@ def _resultado_do_callback(
         email = None
     usuario = db.query(Usuario).filter(Usuario.email == email).first() if email else None
     if usuario is None:
-        logger.info("Login com Microsoft sem usuário no DataCore: %r", email_cru)
+        logger.warning("Login com Microsoft sem usuário no DataCore: %r", email_cru)
         return _erro_sso("usuario_nao_encontrado")
 
-    ticket = sso_tickets.emitir(db, criar_token(usuario))
+    try:
+        ticket = sso_tickets.emitir(db, usuario.id)
+    except SQLAlchemyError as erro:
+        # Ex.: API no ar antes da migration 0002. Volta ao login em vez de 500.
+        db.rollback()
+        logger.error("Login com Microsoft: falha ao gravar o ticket (%s)", type(erro).__name__)
+        return _erro_sso("falha_microsoft")
     return _para_o_front(f"/auth/callback?ticket={ticket}")
 
 
@@ -298,14 +306,14 @@ def callback_microsoft(
 # POST /auth/sso/exchange — o front troca o ticket pelo token
 @router.post("/sso/exchange", response_model=TokenSaida)
 def trocar_ticket(dados: TicketEntrada, db: Session = Depends(get_db)):
-    token = sso_tickets.resgatar(db, dados.ticket)
-    # usuario_do_token relê do banco: se o usuário foi excluído nos 60 s do
-    # ticket, a troca falha em vez de entregar um token de quem não existe mais.
-    usuario = usuario_do_token(token) if token else None
+    usuario_id = sso_tickets.resgatar(db, dados.ticket)
+    # O ticket guarda só o id: o JWT nasce aqui, do usuário relido do banco. Se ele
+    # foi excluído nos 60 s do ticket, o cascade já levou o ticket e a troca falha.
+    usuario = db.get(Usuario, usuario_id) if usuario_id is not None else None
     if usuario is None:
         raise HTTPException(status_code=400, detail=TICKET_INVALIDO)
     return TokenSaida(
-        access_token=token,
+        access_token=criar_token(usuario),
         token_type="bearer",
         role=usuario.papel.nome,
         username=usuario.username,

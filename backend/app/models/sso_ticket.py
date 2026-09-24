@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text
 
 from app.models.database import Base
 
@@ -13,6 +13,6 @@ class SsoTicket(Base):
     __tablename__ = "sso_tickets"
     __table_args__ = {"schema": "auth"}
 
-    ticket = Column(Text, primary_key=True)
-    access_token = Column(Text, nullable=False)
+    ticket_hash = Column(Text, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("auth.usuarios.id", ondelete="CASCADE"), nullable=False)
     expira_em = Column(DateTime(timezone=True), nullable=False)

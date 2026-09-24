@@ -31,8 +31,15 @@ def upgrade() -> None:
     usuario_app = f'"{_usuario_app()}"'
     op.create_table(
         "sso_tickets",
-        sa.Column("ticket", sa.Text, primary_key=True),
-        sa.Column("access_token", sa.Text, nullable=False),
+        # Só o sha256 do ticket e o id do usuário: quem lê a tabela (o usuário de
+        # leitura da empresa tem pg_read_all_data) não consegue entrar por ninguém.
+        sa.Column("ticket_hash", sa.Text, primary_key=True),
+        sa.Column(
+            "usuario_id",
+            sa.Integer,
+            sa.ForeignKey("auth.usuarios.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("expira_em", sa.DateTime(timezone=True), nullable=False),
         schema="auth",
     )

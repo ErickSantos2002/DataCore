@@ -15,10 +15,14 @@ def test_upgrade_cria_as_tabelas_do_auth(engine):
 
 def test_colunas_de_sso_tickets(engine):
     colunas = {c["name"]: c for c in inspect(engine).get_columns("sso_tickets", schema="auth")}
-    assert set(colunas) == {"ticket", "access_token", "expira_em"}
-    assert not colunas["access_token"]["nullable"]
+    assert set(colunas) == {"ticket_hash", "usuario_id", "expira_em"}
+    assert not colunas["usuario_id"]["nullable"]
     assert not colunas["expira_em"]["nullable"]
-    assert inspect(engine).get_pk_constraint("sso_tickets", schema="auth")["constrained_columns"] == ["ticket"]
+    assert inspect(engine).get_pk_constraint("sso_tickets", schema="auth")["constrained_columns"] == ["ticket_hash"]
+    (fk,) = inspect(engine).get_foreign_keys("sso_tickets", schema="auth")
+    assert fk["constrained_columns"] == ["usuario_id"]
+    assert (fk["referred_schema"], fk["referred_table"], fk["referred_columns"]) == ("auth", "usuarios", ["id"])
+    assert fk["options"].get("ondelete") == "CASCADE"
 
 
 def test_colunas_de_usuarios(engine):
