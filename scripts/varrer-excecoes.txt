@@ -18,6 +18,9 @@ frontend/docs/superpowers/specs/2026-08-25-datacorehs-design-system-design.md|ap
 frontend/src/pages/Configuracoes.test.tsx|Esta página é restrita a
 frontend/src/pages/Configuracoes.tsx|Esta página é restrita a
 docs/superpowers/specs/2026-09-24-login-microsoft-design.md|    Fale com o
+frontend/src/auth/erroSso.ts|    "Sua conta Microsoft não tem acesso ao DataCore. Fale com o
+frontend/src/auth/erroSso.test.ts|      "Sua conta Microsoft não tem acesso ao DataCore. Fale com o
+frontend/src/pages/Login.test.tsx|      "Sua conta Microsoft não tem acesso ao DataCore. Fale com o
 
 # URLs de exemplo e de banco de teste local.
 backend/.env.example|user:password@localhost

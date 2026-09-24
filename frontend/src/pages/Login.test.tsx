@@ -1,12 +1,26 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import Login from "./Login";
 import { AuthContext } from "../context/AuthContext";
 import { ThemeProvider } from "../context/ThemeContext";
 
+// `default` também: o AuthContext importa a instância, mesmo sem usá-la aqui.
+vi.mock("../services/api", () => ({
+  default: { get: vi.fn(), post: vi.fn() },
+  irParaLoginMicrosoft: vi.fn(),
+  ssoAtivo: vi.fn(),
+}));
+import { irParaLoginMicrosoft, ssoAtivo } from "../services/api";
+
+beforeEach(() => {
+  vi.mocked(ssoAtivo).mockReset().mockResolvedValue(false);
+  vi.mocked(irParaLoginMicrosoft).mockReset();
+});
+
 function renderLogin(
   auth: Partial<React.ComponentProps<typeof AuthContext.Provider>["value"]>,
+  rota = "/login",
 ) {
   const value = {
     user: null,
@@ -19,7 +33,7 @@ function renderLogin(
     ...auth,
   };
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[rota]}>
       <ThemeProvider>
         <AuthContext.Provider value={value}>
           <Login />
@@ -88,5 +102,64 @@ describe("anel de foco do Login", () => {
       // arquivo, e a string literal seria acusada como uso de paleta crua.
       expect(campo.className).not.toMatch(/ring-blue-\d+/);
     }
+  });
+});
+
+describe("Entrar com Microsoft", () => {
+  it("com SSO ativo, mostra o botao alem do formulario", async () => {
+    vi.mocked(ssoAtivo).mockResolvedValue(true);
+    renderLogin({});
+    expect(
+      await screen.findByRole("button", { name: /entrar com microsoft/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/senha/i)).toBeInTheDocument();
+  });
+
+  it("com SSO desligado, nao ha botao", async () => {
+    renderLogin({});
+    await waitFor(() => expect(ssoAtivo).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: /entrar com microsoft/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("enquanto o status nao chega, o login por senha ja funciona", () => {
+    vi.mocked(ssoAtivo).mockReturnValue(new Promise(() => {}));
+    const login = vi.fn();
+    renderLogin({ login });
+    fireEvent.change(screen.getByLabelText(/usu[áa]rio/i), {
+      target: { value: "erick" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha/i), {
+      target: { value: "x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
+    expect(login).toHaveBeenCalledWith("erick", "x");
+  });
+
+  it("clicar leva ao login da Microsoft", async () => {
+    vi.mocked(ssoAtivo).mockResolvedValue(true);
+    renderLogin({});
+    fireEvent.click(
+      await screen.findByRole("button", { name: /entrar com microsoft/i }),
+    );
+    expect(irParaLoginMicrosoft).toHaveBeenCalledOnce();
+  });
+
+  it("mostra o erro que veio da volta da Microsoft", () => {
+    renderLogin({}, "/login?erro_sso=usuario_nao_encontrado");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Sua conta Microsoft não tem acesso ao DataCore. Fale com o administrador.",
+    );
+  });
+
+  it("o erro do login por senha vence o da Microsoft", () => {
+    renderLogin(
+      { error: "Usuário ou senha incorretos." },
+      "/login?erro_sso=cancelado",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Usuário ou senha incorretos.",
+    );
   });
 });

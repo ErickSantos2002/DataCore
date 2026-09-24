@@ -3,8 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { User } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/logo.png";
+import logoMicrosoft from "../assets/microsoft.svg";
+import { irParaLoginMicrosoft, ssoAtivo } from "../services/api";
+import { mensagemDeErroSso } from "../auth/erroSso";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "../design-system/ui/core/Button";
 
@@ -24,6 +27,30 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [parametros, setParametros] = useSearchParams();
+  // Lido uma vez: o parâmetro sai da URL logo abaixo, e a mensagem fica.
+  const [erroSso] = useState(() =>
+    mensagemDeErroSso(parametros.get("erro_sso")),
+  );
+  const [mostrarMicrosoft, setMostrarMicrosoft] = useState(false);
+
+  useEffect(() => {
+    if (parametros.has("erro_sso")) setParametros({}, { replace: true });
+  }, [parametros, setParametros]);
+
+  // O botão só aparece com o SSO configurado no backend. Enquanto a resposta
+  // não chega (ou se ela falha), o login por senha já está de pé.
+  useEffect(() => {
+    let montado = true;
+    ssoAtivo().then((ativo) => {
+      if (montado) setMostrarMicrosoft(ativo);
+    });
+    return () => {
+      montado = false;
+    };
+  }, []);
+
+  const mensagem = error ?? erroSso;
 
   useEffect(() => {
     if (user) {
@@ -98,12 +125,12 @@ const Login: React.FC = () => {
               composto do cartão (#413344) dava 3,13:1, abaixo do AA de 4,5:1.
               Branco dá 11,78:1, e a borda e o fundo vermelhos seguem dizendo
               que é erro. O painel é escuro nos dois temas. */}
-          {error && (
+          {mensagem && (
             <div
               role="alert"
               className="rounded-lg border border-danger bg-tint-danger p-2 text-center text-sm text-white"
             >
-              {error}
+              {mensagem}
             </div>
           )}
 
@@ -117,6 +144,31 @@ const Login: React.FC = () => {
             {loading ? "Entrando..." : "Entrar"}
           </Button>
         </form>
+
+        {mostrarMicrosoft && (
+          <>
+            <div
+              className="my-5 flex items-center gap-3 text-xs text-white/60"
+              aria-hidden="true"
+            >
+              <span className="h-px flex-1 bg-white/20" />
+              ou
+              <span className="h-px flex-1 bg-white/20" />
+            </div>
+            {/* Botão cru, como os campos acima: o painel é escuro nos dois
+                temas (exceção documentada), e o `Button` do design system
+                segue o tema. Navegação, não fetch: é redirect entre domínios. */}
+            <button
+              type="button"
+              onClick={irParaLoginMicrosoft}
+              disabled={loading}
+              className="flex h-[48px] w-full items-center justify-center gap-3 rounded-lg border border-white/30 bg-white/10 font-medium text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+            >
+              <img src={logoMicrosoft} alt="" className="h-5 w-5" />
+              Entrar com Microsoft
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
