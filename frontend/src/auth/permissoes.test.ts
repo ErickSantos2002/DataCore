@@ -141,6 +141,10 @@ describe("podeAcessar, sem usuário autenticado", () => {
   it("libera /login", () => {
     expect(podeAcessar("/login", null)).toBe(true);
   });
+
+  it("libera /auth/callback, a volta do login com Microsoft", () => {
+    expect(podeAcessar("/auth/callback", null)).toBe(true);
+  });
 });
 
 /**
@@ -253,9 +257,14 @@ describe("podeAcessar em rota que a matriz não conhece", () => {
   });
 });
 
+/** Abertas sem sessão: o login e a volta do login com Microsoft. */
+const PUBLICAS = ["/login", "/auth/callback"];
+
 describe("a matriz cobre todas as rotas do app", () => {
-  it("tem uma regra para cada rota protegida, mais /login", () => {
-    expect(Object.keys(PERMISSOES).sort()).toEqual([...ROTAS, "/login"].sort());
+  it("tem uma regra para cada rota protegida, mais as públicas", () => {
+    expect(Object.keys(PERMISSOES).sort()).toEqual(
+      [...ROTAS, ...PUBLICAS].sort(),
+    );
   });
 });
 
@@ -263,7 +272,7 @@ describe("rotasVisiveis", () => {
   for (const perfil of PERFIS) {
     it(`devolve para o papel ${perfil.nome} exatamente as rotas que ele acessa`, () => {
       expect(rotasVisiveis(perfil.user).sort()).toEqual(
-        [...perfil.libera, "/login"].sort(),
+        [...perfil.libera, ...PUBLICAS].sort(),
       );
     });
   }
@@ -275,8 +284,8 @@ describe("rotasVisiveis", () => {
     expect(visiveis).toContain("/locacao");
   });
 
-  it("devolve só a rota pública para quem não está autenticado", () => {
-    expect(rotasVisiveis(null)).toEqual(["/login"]);
+  it("devolve só as rotas públicas para quem não está autenticado", () => {
+    expect(rotasVisiveis(null).sort()).toEqual([...PUBLICAS].sort());
   });
 
   it("nunca devolve rota que `podeAcessar` negaria", () => {

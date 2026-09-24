@@ -21,9 +21,35 @@ const authApi = criarHttp(baseURL);
 // responde com redirect para a Microsoft, em outro dominio.
 export const URL_LOGIN_MICROSOFT = `${baseURL}/microsoft`;
 
+// Nonce deste navegador: prova, na volta, que foi ELE quem clicou no botao.
+// Sem isso, alguem com conta para no 302 do proprio login, pega o ?ticket= e
+// manda o link a outra pessoa, que entraria na conta dele (login CSRF).
+const CHAVE_NONCE_SSO = "sso_nonce";
+
+/** Grava o nonce e devolve a URL do login. Storage bloqueado: segue sem nonce. */
+export function prepararLoginMicrosoft(): string {
+  try {
+    sessionStorage.setItem(CHAVE_NONCE_SSO, crypto.randomUUID());
+  } catch {
+    // Sem storage a volta vai recusar o ticket; o login por senha segue.
+  }
+  return URL_LOGIN_MICROSOFT;
+}
+
+/** Diz se este navegador iniciou o login, e queima o nonce (uso unico). */
+export function consumirNonceSso(): boolean {
+  try {
+    const existe = sessionStorage.getItem(CHAVE_NONCE_SSO) !== null;
+    sessionStorage.removeItem(CHAVE_NONCE_SSO);
+    return existe;
+  } catch {
+    return false;
+  }
+}
+
 /** Uma funcao, e nao `window.location` solto no componente: o teste simula esta. */
 export function irParaLoginMicrosoft(): void {
-  window.location.assign(URL_LOGIN_MICROSOFT);
+  window.location.assign(prepararLoginMicrosoft());
 }
 
 /** Se o botao aparece. Qualquer falha vira `false`: o login por senha segue. */

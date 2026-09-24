@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
-import { trocarTicket } from "../services/api";
+import { consumirNonceSso, trocarTicket } from "../services/api";
 import { Spinner } from "../design-system/ui/core/Spinner";
 
 const TICKET_INVALIDO = "Link de acesso inválido ou expirado.";
@@ -36,6 +36,9 @@ const AuthCallback: React.FC = () => {
     (async () => {
       try {
         if (!ticket) throw new Error("sem ticket");
+        // Sem o nonce, não foi este navegador que clicou no botão: é link de
+        // outra pessoa (login CSRF) e entraria na conta dela.
+        if (!consumirNonceSso()) throw new Error("sem nonce");
         await entrarComToken(await trocarTicket(ticket));
         setDarkModeOnLogin();
         navigate("/inicio", { replace: true });

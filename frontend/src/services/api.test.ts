@@ -1,9 +1,11 @@
 import axios from "axios";
 import type { AxiosInstance, InternalAxiosRequestConfig } from "axios";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import authApi, {
   URL_LOGIN_MICROSOFT,
   URL_PADRAO_DA_AUTENTICACAO,
+  consumirNonceSso,
+  prepararLoginMicrosoft,
   ssoAtivo,
   trocarTicket,
   updateUserPassword,
@@ -80,6 +82,35 @@ describe("endereco da API de autenticacao", () => {
 describe("login com Microsoft", () => {
   afterEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("prepararLoginMicrosoft grava um nonce e devolve a URL do botao", () => {
+    expect(prepararLoginMicrosoft()).toBe(URL_LOGIN_MICROSOFT);
+    expect(sessionStorage.getItem("sso_nonce")).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("consumirNonceSso vale uma vez so", () => {
+    prepararLoginMicrosoft();
+    expect(consumirNonceSso()).toBe(true);
+    expect(sessionStorage.getItem("sso_nonce")).toBeNull();
+    expect(consumirNonceSso()).toBe(false);
+  });
+
+  it("consumirNonceSso sem nonce responde false", () => {
+    expect(consumirNonceSso()).toBe(false);
+  });
+
+  it("com o storage bloqueado, prepara sem nonce e a volta nao passa", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("bloqueado");
+    });
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("bloqueado");
+    });
+    expect(prepararLoginMicrosoft()).toBe(URL_LOGIN_MICROSOFT);
+    expect(consumirNonceSso()).toBe(false);
   });
 
   it("a URL do botao e a /microsoft da base da autenticacao", () => {

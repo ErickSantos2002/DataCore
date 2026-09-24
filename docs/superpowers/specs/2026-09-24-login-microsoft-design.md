@@ -43,9 +43,10 @@ Microsoft ─────────────▶ GET /auth/microsoft/callbac
                           confere state com o cookie
                           troca code por token → GET graph.microsoft.com/v1.0/me
                           e-mail normalizado → Usuario por email
-                          criar_token(usuario) → grava ticket (60 s)
+                          grava ticket (60 s) → usuario.id
                           302 → {FRONTEND_URL}/auth/callback?ticket=<opaco>
 Front /auth/callback ──▶ POST /auth/sso/exchange {ticket}
+                          resgata usuario_id → criar_token(usuario)
                           ← TokenSaida (o mesmo do /auth/login)
                           → entrarComToken → /me → /inicio
 ```
@@ -104,19 +105,24 @@ Tabela `auth.sso_tickets` (migration Alembic `0002`):
 
 | coluna | tipo |
 |---|---|
-| `ticket` | `text` PK — `secrets.token_urlsafe(32)` |
-| `access_token` | `text NOT NULL` |
+| `ticket_hash` | `text` PK — sha256 hex de `secrets.token_urlsafe(32)` |
+| `usuario_id` | `integer NOT NULL REFERENCES auth.usuarios(id) ON DELETE CASCADE` |
 | `expira_em` | `timestamptz NOT NULL` — agora + 60 s |
 
 SQL direto com `text()`. A tabela tem também um modelo ORM (`app/models/sso_ticket.py`),
 só para o `alembic check` do `test_migrations.py` não acusar a tabela como sobra.
 
-- `emitir(db, access_token) -> str` — insere e devolve o ticket.
-- `resgatar(db, ticket) -> str | None` — na mesma transação:
+- `emitir(db, usuario_id) -> str` — gera o ticket, grava o hash e devolve o ticket
+  em claro (que nunca vai ao banco).
+- `resgatar(db, ticket) -> int | None` — na mesma transação:
   `DELETE FROM auth.sso_tickets WHERE expira_em <= now()` e
-  `DELETE ... WHERE ticket = :t AND expira_em > now() RETURNING access_token`.
+  `DELETE ... WHERE ticket_hash = :h AND expira_em > now() RETURNING usuario_id`.
   O `DELETE ... RETURNING` é atômico: duas trocas simultâneas do mesmo ticket, só
-  uma recebe o token.
+  uma recebe o usuário. O `/sso/exchange` relê o `Usuario` e só então cria o JWT.
+
+A tabela não guarda o JWT nem o ticket em claro: o usuário de leitura da empresa
+(`pg_read_all_data`) enxerga `auth.sso_tickets`, e com um deles entraria na conta
+de outra pessoa. Excluir o usuário apaga os tickets dele (cascade).
 
 O ticket fica no Postgres, e não em memória como no GestorHS, para funcionar com
 qualquer número de workers ou réplicas. Em memória, dois processos fazem o login
@@ -191,12 +197,18 @@ Sem layout, como o `/login` (entra em `noLayoutRoutes`). Ao montar:
 3. Sem ticket ou com erro: "Link de acesso inválido ou expirado." e o botão
    "Voltar para o login".
 
+Nonce contra login CSRF: o botão grava `sessionStorage["sso_nonce"]` antes de sair
+(`prepararLoginMicrosoft`) e a volta só troca o ticket se o nonce existir
+(`consumirNonceSso`, uso único). Sem ele, um link com o ticket de outra pessoa dá o
+mesmo erro, sem chamar a troca.
+
 Tem que rodar uma vez só: o `StrictMode` monta duas vezes em dev, e a segunda troca
 do mesmo ticket falharia. Guarda com `useRef`.
 
 ### Serviço
 
-`services/api.ts` ganha `trocarTicket(ticket)`, `ssoAtivo()` e a constante com a
+`services/api.ts` ganha `trocarTicket(ticket)`, `ssoAtivo()`,
+`prepararLoginMicrosoft()`, `consumirNonceSso()` e a constante com a
 URL de `/microsoft`, todos sobre a mesma base da autenticação (`VITE_API_URL` ou
 `…/auth`).
 

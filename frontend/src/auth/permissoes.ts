@@ -37,6 +37,9 @@ export type Regra =
 
 export const PERMISSOES: Record<string, Regra> = {
   "/login": { tipo: "publico" },
+  // Volta do login com Microsoft. Pública porque a sessão ainda não existe; o
+  // menu não a lista (a Sidebar só mostra os itens que ela mesma declara).
+  "/auth/callback": { tipo: "publico" },
 
   "/inicio": { tipo: "autenticado" },
   "/dashboard": { tipo: "autenticado" },

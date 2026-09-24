@@ -899,9 +899,7 @@ describe("SearchSelect", () => {
     await userEvent.click(screen.getByLabelText("Cliente"));
     await userEvent.keyboard("QUIM");
     expect(screen.getByText("QUIMICA EXEMPLO LTDA")).toBeVisible();
-    expect(
-      screen.queryByText("CIMENTOS EXEMPLO S.A"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("CIMENTOS EXEMPLO S.A")).not.toBeInTheDocument();
   });
 
   it("diz quando a busca nao acha nada, em frase completa", async () => {

@@ -10,8 +10,9 @@ import { ThemeProvider } from "../context/ThemeContext";
 vi.mock("../services/api", () => ({
   default: { get: vi.fn(), post: vi.fn() },
   trocarTicket: vi.fn(),
+  consumirNonceSso: vi.fn(),
 }));
-import { trocarTicket } from "../services/api";
+import { consumirNonceSso, trocarTicket } from "../services/api";
 
 function montar(
   rota: string,
@@ -46,6 +47,7 @@ function montar(
 
 beforeEach(() => {
   vi.mocked(trocarTicket).mockReset();
+  vi.mocked(consumirNonceSso).mockReset().mockReturnValue(true);
 });
 
 describe("AuthCallback", () => {
@@ -77,6 +79,17 @@ describe("AuthCallback", () => {
 
   it("sem ticket nem tenta trocar", async () => {
     montar("/auth/callback");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Link de acesso inválido ou expirado.",
+    );
+    expect(trocarTicket).not.toHaveBeenCalled();
+  });
+
+  it("sem o nonce deste navegador recusa o ticket sem trocar", async () => {
+    // Link de outra pessoa (login CSRF): o ticket e valido, mas nao foi este
+    // navegador que clicou em "Entrar com Microsoft".
+    vi.mocked(consumirNonceSso).mockReturnValue(false);
+    montar("/auth/callback?ticket=tic-alheio");
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Link de acesso inválido ou expirado.",
     );
