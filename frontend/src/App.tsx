@@ -12,7 +12,7 @@ import { useAuth } from "./hooks/useAuth";
 import logo from "./assets/HS2.ico";
 
 // Rotas onde o layout (AppShell) não deve aparecer (ex: login)
-const noLayoutRoutes = ["/login"];
+const noLayoutRoutes = ["/login", "/auth/callback"];
 
 const App: React.FC = () => {
   const location = useLocation();

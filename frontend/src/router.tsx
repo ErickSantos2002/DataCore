@@ -11,6 +11,7 @@ import { DashboardProvider } from "./context/DashboardContext";
 import { EstoqueProvider } from "./context/EstoqueContext";
 
 const Login = lazy(() => import("./pages/Login"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const Home = lazy(() => import("./pages/Home"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
@@ -86,6 +87,7 @@ const AppRoutes: React.FC = () => (
   <Suspense fallback={<CarregandoPagina />}>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       <Route
         path="/inicio"
