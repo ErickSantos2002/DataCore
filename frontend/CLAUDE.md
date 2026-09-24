@@ -20,7 +20,7 @@ npx vitest run -t "nome do teste"                       # um teste
 TZ=UTC npm test && TZ=America/Sao_Paulo npm test        # a suíte tem que passar nos dois
 ```
 
-Baselines em 22/09/2026: **2027 testes / 160 arquivos**, verdes nos dois fusos; lint
+Baselines em 24/09/2026: **2075 testes / 162 arquivos**, verdes nos dois fusos; lint
 **9 avisos, 0 erros** (era 143 em 31/08 e 24 em 16/09 — os 15 `set-state-in-effect`
 acabaram em 22/09); `tsc` limpo; `prettier --check .` limpo. Nada pode regredir; o lint
 não pode subir.

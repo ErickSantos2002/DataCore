@@ -85,6 +85,12 @@ Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por ba
   **precisa** entrar com `dependencies=PROTEGIDO` (há teste que falha se não
   entrar). `AUTH_OBRIGATORIA=false` deixa passar anônimo com `WARNING` no log;
   `true` bloqueia. Senha e e-mail são definidos só por admin.
+- **Login com Microsoft (Entra ID)** em `/auth/microsoft*` e `/auth/sso/*`
+  (`core/microsoft.py`, `core/sso_tickets.py`). Casa a conta pelo **e-mail** do
+  usuário, sem cadastro automático. O ticket entre callback e front mora em
+  `auth.sso_tickets` (hash + usuario_id, 60 s), não em memória: pode ter réplica.
+  Os testes zeram as `MS_*` no `conftest.py` porque o `.env` local tem o secret
+  real; SSO ligado só pela fixture `sso`. Spec: `docs/superpowers/specs/2026-09-24-login-microsoft-design.md`.
 - O `Dockerfile` copia apenas `app/` e `requirements.txt`; `migrations/` e os scripts da
   raiz não entram na imagem.
 - Produção é o serviço `datacore-api` do EasyPanel, que builda `backend/` com o `Dockerfile` desta pasta.
