@@ -17,6 +17,7 @@ frontend/docs/superpowers/specs/2026-08-25-datacorehs-design-system-design.md|ne
 frontend/docs/superpowers/specs/2026-08-25-datacorehs-design-system-design.md|aplicar ali a frase "restrita a
 frontend/src/pages/Configuracoes.test.tsx|Esta página é restrita a
 frontend/src/pages/Configuracoes.tsx|Esta página é restrita a
+docs/superpowers/specs/2026-09-24-login-microsoft-design.md|    Fale com o
 
 # URLs de exemplo e de banco de teste local.
 backend/.env.example|user:password@localhost
