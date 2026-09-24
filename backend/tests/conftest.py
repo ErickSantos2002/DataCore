@@ -22,6 +22,12 @@ os.environ["SECRET_KEY"] = "segredo-so-dos-testes-com-pelo-menos-32-bytes"
 os.environ["AUTH_OBRIGATORIA"] = "false"
 os.environ["AUTH_APP_DB_USER"] = "app_teste"
 
+# O backend/.env da máquina tem o SSO real configurado, e o Settings lê o .env.
+# Variável de ambiente vence o .env: aqui o SSO nasce DESLIGADO em todo teste, e
+# quem precisa dele ligado usa a fixture `sso` (valores falsos).
+for _var in ("MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET", "MS_REDIRECT_URI", "FRONTEND_URL"):
+    os.environ[_var] = ""
+
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
@@ -85,7 +91,9 @@ def engine(alembic_cfg):
 @pytest.fixture(autouse=True)
 def banco_limpo(engine):
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE auth.usuarios, auth.papeis RESTART IDENTITY CASCADE"))
+        conn.execute(text(
+            "TRUNCATE auth.sso_tickets, auth.usuarios, auth.papeis RESTART IDENTITY CASCADE"
+        ))
         conn.execute(text(
             "INSERT INTO auth.papeis (nome) VALUES ('admin'), ('comum'), ('financeiro')"
         ))

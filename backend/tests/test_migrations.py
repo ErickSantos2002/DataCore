@@ -10,7 +10,15 @@ from tests.conftest import RAIZ
 
 def test_upgrade_cria_as_tabelas_do_auth(engine):
     tabelas = set(inspect(engine).get_table_names(schema="auth"))
-    assert tabelas == {"papeis", "usuarios", "alembic_version"}
+    assert tabelas == {"papeis", "usuarios", "sso_tickets", "alembic_version"}
+
+
+def test_colunas_de_sso_tickets(engine):
+    colunas = {c["name"]: c for c in inspect(engine).get_columns("sso_tickets", schema="auth")}
+    assert set(colunas) == {"ticket", "access_token", "expira_em"}
+    assert not colunas["access_token"]["nullable"]
+    assert not colunas["expira_em"]["nullable"]
+    assert inspect(engine).get_pk_constraint("sso_tickets", schema="auth")["constrained_columns"] == ["ticket"]
 
 
 def test_colunas_de_usuarios(engine):
@@ -48,13 +56,15 @@ def test_usuario_da_app_recebe_so_os_grants_das_tabelas(engine):
         assert pode("SELECT has_table_privilege('app_teste', 'auth.papeis', 'SELECT')")
         assert pode("SELECT has_sequence_privilege('app_teste', 'auth.usuarios_id_seq', 'USAGE')")
         assert not pode("SELECT has_table_privilege('app_teste', 'auth.alembic_version', 'UPDATE')")
+        assert pode("SELECT has_table_privilege('app_teste', 'auth.sso_tickets', 'SELECT, INSERT, DELETE')")
+        assert not pode("SELECT has_table_privilege('app_teste', 'auth.sso_tickets', 'UPDATE')")
 
 
 def test_downgrade_e_upgrade_de_novo(engine, alembic_cfg):
     command.downgrade(alembic_cfg, "base")
     assert set(inspect(engine).get_table_names(schema="auth")) == {"alembic_version"}
     command.upgrade(alembic_cfg, "head")
-    assert {"papeis", "usuarios"} <= set(inspect(engine).get_table_names(schema="auth"))
+    assert {"papeis", "usuarios", "sso_tickets"} <= set(inspect(engine).get_table_names(schema="auth"))
 
 
 def _carregar_migration():

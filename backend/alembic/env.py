@@ -26,7 +26,7 @@ os.environ.setdefault("DATABASE_URL", URL)
 os.environ.setdefault("SECRET_KEY", "nao-usada-nas-migrations-do-schema-auth")
 
 from app.models.database import Base  # noqa: E402
-from app.models import papel, usuario  # noqa: E402,F401  (registram as tabelas)
+from app.models import papel, sso_ticket, usuario  # noqa: E402,F401  (registram as tabelas)
 
 
 def include_name(name, type_, parent_names):

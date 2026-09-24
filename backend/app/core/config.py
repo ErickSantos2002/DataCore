@@ -23,6 +23,22 @@ class Settings(BaseSettings):
     # true: rotas de dados exigem token válido
     AUTH_OBRIGATORIA: bool = False
 
+    # Login com Microsoft (Entra ID) — ver spec 2026-09-24. Os valores vêm do
+    # registro de aplicativo "DataCore" no Entra. Qualquer um vazio = SSO
+    # desligado: a API sobe normal e o front esconde o botão.
+    MS_TENANT_ID: str = ""
+    MS_CLIENT_ID: str = ""
+    MS_CLIENT_SECRET: str = ""
+    MS_REDIRECT_URI: str = ""
+    FRONTEND_URL: str = ""
+
+    @property
+    def sso_ativo(self) -> bool:
+        return all((
+            self.MS_TENANT_ID, self.MS_CLIENT_ID, self.MS_CLIENT_SECRET,
+            self.MS_REDIRECT_URI, self.FRONTEND_URL,
+        ))
+
     # Configurações NFSe Recife
     # Opção 1: Caminhos para arquivos locais (desenvolvimento)
     NFSE_CERT_PATH: Optional[str] = None
