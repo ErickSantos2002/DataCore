@@ -30,6 +30,7 @@ describe("carregamento da página sob demanda", () => {
           token: null,
           loading: false,
           login: vi.fn(),
+          entrarComToken: vi.fn(),
           logout: vi.fn(),
           error: null,
         }}

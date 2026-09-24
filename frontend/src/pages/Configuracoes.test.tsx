@@ -17,6 +17,7 @@ function renderConfiguracoes(opts: {
     token: "t",
     loading: false,
     login: vi.fn(),
+    entrarComToken: vi.fn(),
     logout: vi.fn(),
     error: null,
     ...opts.auth,

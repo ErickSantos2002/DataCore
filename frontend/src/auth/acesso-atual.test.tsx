@@ -103,6 +103,7 @@ function renderizar(rota: string, user: Usuario, loading = false): void {
         token: user ? "token-de-teste" : null,
         loading,
         login: vi.fn(),
+        entrarComToken: vi.fn(),
         logout: vi.fn(),
         error: null,
       }}

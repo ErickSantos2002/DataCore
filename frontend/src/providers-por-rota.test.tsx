@@ -101,6 +101,7 @@ async function providersMontadosEm(rota: string): Promise<string[]> {
         token: "token-de-teste",
         loading: false,
         login: vi.fn(),
+        entrarComToken: vi.fn(),
         logout: vi.fn(),
         error: null,
       }}
