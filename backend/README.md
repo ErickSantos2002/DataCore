@@ -262,9 +262,15 @@ como endpoint e ninguém a chamava — 31 notas de 04/09 a 10/09 estavam fora do
 A janela larga custa o mesmo que a estreita: o ADN só se consulta por NSU, então o
 serviço varre tudo e filtra a data depois. Às 04:30 para cair antes do dbt das 05:00.
 
+Os arquivos saem da pasta `deploy/` na **raiz do repo** (não de `backend/`) e vão para a
+VPS à mão — ela não tem clone do repo. `<vps>` é o alias do ssh:
+
 ```bash
-cp deploy/rodar-job.sh /opt/datacore-jobs/
-cp deploy/systemd/* /etc/systemd/system/
+# na máquina local, da raiz do DataCore
+scp deploy/rodar-job.sh deploy/rodar-dbt.sh <vps>:/opt/datacore-jobs/
+scp deploy/systemd/* <vps>:/etc/systemd/system/
+
+# na VPS
 systemctl daemon-reload
 systemctl enable --now tiny-extrator-notas.timer tiny-extrator-contas.timer tiny-extrator-estoque.timer \
     tiny-extrator-nfse.timer

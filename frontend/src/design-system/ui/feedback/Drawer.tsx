@@ -55,7 +55,7 @@ function focaveisDentro(container: HTMLElement): HTMLElement[] {
  *   open={aberto}
  *   onClose={fechar}
  *   eyebrow="Pedido #1234"
- *   title="Intercement Brasil S.A"
+ *   title="Cimentos Exemplo S.A"
  *   subtitle="NF-e 000.123.456"
  *   status={{ label: "Faturado", variant: "success" }}
  * >
@@ -193,7 +193,7 @@ export function Drawer({
  *
  * ```tsx
  * <DrawerBody>
- *   <DrawerField label="Cliente">Intercement Brasil S.A</DrawerField>
+ *   <DrawerField label="Cliente">Cimentos Exemplo S.A</DrawerField>
  *   <DrawerField label="Status"><Badge variant="success">Ativo</Badge></DrawerField>
  * </DrawerBody>
  * ```

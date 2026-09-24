@@ -9,7 +9,7 @@ describe("FilterBar", () => {
     render(
       <FilterBar
         appliedFilters={[
-          { key: "cliente", label: "Cliente: INTERCEMENT" },
+          { key: "cliente", label: "Cliente: CIMENTOS EXEMPLO" },
           { key: "periodo", label: "Período: Este mês" },
         ]}
         onRemoveFilter={aoRemover}
@@ -18,7 +18,7 @@ describe("FilterBar", () => {
       </FilterBar>,
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Remover filtro Cliente: INTERCEMENT" }),
+      screen.getByRole("button", { name: "Remover filtro Cliente: CIMENTOS EXEMPLO" }),
     );
     expect(aoRemover).toHaveBeenCalledTimes(1);
     expect(aoRemover).toHaveBeenCalledWith("cliente");
@@ -28,7 +28,7 @@ describe("FilterBar", () => {
     const aoLimpar = vi.fn();
     render(
       <FilterBar
-        appliedFilters={[{ key: "cliente", label: "Cliente: INTERCEMENT" }]}
+        appliedFilters={[{ key: "cliente", label: "Cliente: CIMENTOS EXEMPLO" }]}
         onClearFilters={aoLimpar}
       >
         <div>campo</div>
@@ -69,7 +69,7 @@ describe("FilterBar", () => {
 
   it("mostra so o bloco de aplicados quando nao ha visoes", () => {
     render(
-      <FilterBar appliedFilters={[{ key: "cliente", label: "Cliente: INTERCEMENT" }]}>
+      <FilterBar appliedFilters={[{ key: "cliente", label: "Cliente: CIMENTOS EXEMPLO" }]}>
         <div>campo</div>
       </FilterBar>,
     );

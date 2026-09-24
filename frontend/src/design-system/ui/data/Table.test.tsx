@@ -23,7 +23,7 @@ describe("Table", () => {
         <TableBody>
           <TableRow>
             <TableCell>1500</TableCell>
-            <TableCell>INTERCEMENT BRASIL S.A</TableCell>
+            <TableCell>CIMENTOS EXEMPLO S.A</TableCell>
           </TableRow>
         </TableBody>
       </Table>,

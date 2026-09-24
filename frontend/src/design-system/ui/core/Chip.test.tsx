@@ -4,20 +4,20 @@ import { Chip } from "./Chip";
 
 describe("Chip", () => {
   it("mostra o texto que recebe", () => {
-    render(<Chip>Cliente: INTERCEMENT</Chip>);
-    expect(screen.getByText("Cliente: INTERCEMENT")).toBeInTheDocument();
+    render(<Chip>Cliente: CIMENTOS EXEMPLO</Chip>);
+    expect(screen.getByText("Cliente: CIMENTOS EXEMPLO")).toBeInTheDocument();
   });
 
   it("sem onRemove, o x nao aparece", () => {
-    render(<Chip>Cliente: INTERCEMENT</Chip>);
+    render(<Chip>Cliente: CIMENTOS EXEMPLO</Chip>);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("com onRemove, o x chama o callback ao ser clicado", () => {
     const aoRemover = vi.fn();
-    render(<Chip onRemove={aoRemover}>Cliente: INTERCEMENT</Chip>);
+    render(<Chip onRemove={aoRemover}>Cliente: CIMENTOS EXEMPLO</Chip>);
     fireEvent.click(
-      screen.getByRole("button", { name: "Remover filtro Cliente: INTERCEMENT" }),
+      screen.getByRole("button", { name: "Remover filtro Cliente: CIMENTOS EXEMPLO" }),
     );
     expect(aoRemover).toHaveBeenCalledTimes(1);
   });

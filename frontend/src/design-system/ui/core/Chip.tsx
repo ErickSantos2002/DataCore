@@ -29,7 +29,7 @@ const VARIANT_CLASSES: Record<NonNullable<ChipProps["variant"]>, string> = {
  *
  * ```tsx
  * <Chip variant="aplicado" onRemove={() => remover("cliente")}>
- *   Cliente: INTERCEMENT
+ *   Cliente: CIMENTOS EXEMPLO
  * </Chip>
  * <Chip variant="salvo">Minha visão</Chip>
  * ```

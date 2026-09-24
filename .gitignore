@@ -10,7 +10,9 @@ acme.json
 
 # Sessões do Claude: SETUP-CLAUDE.md já carregou string de conexão
 SETUP-CLAUDE.md
-.claude/
+# .claude/ é local (RESUME, settings.local), menos o settings.json, que é do repo.
+**/.claude/*
+!**/.claude/settings.json
 .superpowers/
 
 # Dados — repo público

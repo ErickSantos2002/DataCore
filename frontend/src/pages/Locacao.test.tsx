@@ -489,11 +489,11 @@ describe("Locação — ordenação", () => {
   });
 
   it("ordenar por Cliente não embaralha as notas do mesmo cliente", async () => {
-    // O caso da base real, com os números e os nomes que ela tem: duas notas
-    // da Mineração e uma da APERAM. Com o comparador velho o par da Mineração
+    // O caso da base real, com os números que ela tem: duas notas da
+    // Mineração e uma da AGRO. Com o comparador velho o par da Mineração
     // saía invertido em relação à ordem que a API mandou.
     const MINERACAO = {
-      nome: "Mineracao Riacho dos Machados Ltda. ",
+      nome: "Mineracao Exemplo Ltda. ",
       cpf_cnpj: "44.555.666/0001-77",
     };
     await montar([
@@ -503,7 +503,7 @@ describe("Locação — ordenação", () => {
         id: 3,
         numero: "007948",
         cliente: {
-          nome: "APERAM BIOENERGIA LTDA.",
+          nome: "AGRO EXEMPLO LTDA.",
           cpf_cnpj: "77.888.999/0002-00",
         },
       }),

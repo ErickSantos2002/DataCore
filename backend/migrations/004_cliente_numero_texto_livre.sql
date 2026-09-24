@@ -3,7 +3,7 @@
 -- POR QUÊ
 -- O campo se chama "número" e parece caber em 10 caracteres, mas na origem é TEXTO LIVRE:
 -- o Tiny aceita o que o usuário digitar. Em 2026-09-04 uma conta a receber de R$ 23.520
--- (ITUIUTABA BIOENERGIA, id 616934028) foi rejeitada inteira com StringDataRightTruncation
+-- (de uma usina cliente) foi rejeitada inteira com StringDataRightTruncation
 -- porque o número do endereço vinha como "NAO INFORMADO" — 13 caracteres.
 --
 -- O `caber_no_schema` daquele dia impediu a perda do registro, mas corta o valor: aquela

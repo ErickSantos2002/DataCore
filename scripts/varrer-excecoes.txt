@@ -36,3 +36,10 @@ docs/superpowers/plans/2026-09-23-monorepo.md|"naoeasenha"
 # CPF sintético dos dados falsos do front (trecho curto pra esta linha não casar no padrão).
 frontend/src/pages/Clientes.tabela.test.tsx|"123.456.789-0
 frontend/src/pages/clientes/clientesFalsos.ts|"123.456.789-0
+
+# CNPJ da própria H&S (emitente das NFS-e — dado público) e CNPJ fictício de fixture
+# que por acaso tem dígito verificador válido.
+backend/.env.example|NFSE_CNPJ=
+backend/NFSE_IMPORTACAO.md|NFSE_CNPJ=
+backend/app/core/config.py|NFSE_CNPJ: str =
+backend/testar_extrator_contas_estoque.py|"nome": "Secretaria da Fazenda"

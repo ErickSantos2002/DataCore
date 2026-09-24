@@ -30,7 +30,6 @@ yarn-error.log*
 Thumbs.db
 
 # Claude
-.claude/
 ALEX_AGENT_MAPPING.md
 .superpowers/
 

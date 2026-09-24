@@ -889,18 +889,18 @@ import { describe, expect, it } from "vitest";
 import { SearchSelect } from "./SearchSelect";
 
 const CLIENTES = [
-  { value: "1", label: "INTERCEMENT BRASIL S.A" },
-  { value: "2", label: "ELEMENTIS SPECIALTIES" },
+  { value: "1", label: "CIMENTOS EXEMPLO S.A" },
+  { value: "2", label: "QUIMICA EXEMPLO LTDA" },
 ];
 
 describe("SearchSelect", () => {
   it("filtra as opcoes conforme se digita", async () => {
     render(<SearchSelect label="Cliente" options={CLIENTES} searchable />);
     await userEvent.click(screen.getByLabelText("Cliente"));
-    await userEvent.keyboard("ELEM");
-    expect(screen.getByText("ELEMENTIS SPECIALTIES")).toBeVisible();
+    await userEvent.keyboard("QUIM");
+    expect(screen.getByText("QUIMICA EXEMPLO LTDA")).toBeVisible();
     expect(
-      screen.queryByText("INTERCEMENT BRASIL S.A"),
+      screen.queryByText("CIMENTOS EXEMPLO S.A"),
     ).not.toBeInTheDocument();
   });
 
@@ -1005,7 +1005,7 @@ describe("Table", () => {
         <TableBody>
           <TableRow>
             <TableCell>1500</TableCell>
-            <TableCell>INTERCEMENT BRASIL S.A</TableCell>
+            <TableCell>CIMENTOS EXEMPLO S.A</TableCell>
           </TableRow>
         </TableBody>
       </Table>,

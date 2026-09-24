@@ -199,7 +199,7 @@ def main():
     # nunca devia ter sido acionada por um texto tão banal.
     relato = salvar_conta(db, "receber", conta_exemplo(
         id="700000009",
-        cliente={"nome": "ITUIUTABA BIOENERGIA LTDA.", "cpf_cnpj": "66777888000199",
+        cliente={"nome": "USINA EXEMPLO LTDA.", "cpf_cnpj": "66777888000199",
                  "numero": "NAO INFORMADO", "tipo_pessoa": "J"}))
     salva = db.query(ContasReceber).filter(ContasReceber.id_tiny == 700000009).one_or_none()
     checa("a conta entrou apesar do campo grande", salva is not None, str(relato["acao"]))

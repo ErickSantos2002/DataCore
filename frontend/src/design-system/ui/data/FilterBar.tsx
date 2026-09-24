@@ -5,7 +5,7 @@ import { Chip } from "../core/Chip";
 export interface FilterBarAppliedFilter {
   /** Identifica o filtro nas callbacks — não aparece na pílula. */
   key: string;
-  /** Texto da pílula — ex.: "Cliente: INTERCEMENT". */
+  /** Texto da pílula — ex.: "Cliente: CIMENTOS EXEMPLO". */
   label: string;
 }
 
@@ -65,7 +65,7 @@ export interface FilterBarProps {
  * ```tsx
  * <FilterBar
  *   actions={<Button variant="secondary">Exportar</Button>}
- *   appliedFilters={[{ key: "cliente", label: "Cliente: INTERCEMENT" }]}
+ *   appliedFilters={[{ key: "cliente", label: "Cliente: CIMENTOS EXEMPLO" }]}
  *   onRemoveFilter={(key) => removerFiltro(key)}
  *   onClearFilters={() => limparFiltros()}
  *   views={[{ key: "vencidas", label: "Vencidas" }]}
