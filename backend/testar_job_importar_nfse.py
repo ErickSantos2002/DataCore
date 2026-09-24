@@ -31,6 +31,7 @@ os.environ["DATABASE_URL"] = "postgresql+psycopg2://postgres:teste@localhost:554
 os.environ.setdefault("TINY_TOKEN", "token-de-teste")
 os.environ["NFSE_CERT_PATH"] = "/dev/null"
 os.environ["NFSE_KEY_PATH"] = "/dev/null"
+os.environ.setdefault("SECRET_KEY", "chave-de-teste-" + "x" * 32)  # o Settings exige 32+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy import text  # noqa: E402

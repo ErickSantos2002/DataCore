@@ -27,6 +27,7 @@ os.environ["DATABASE_URL"] = (
 )
 os.environ.setdefault("NFSE_CERT_PATH", "/dev/null")
 os.environ.setdefault("NFSE_KEY_PATH", "/dev/null")
+os.environ.setdefault("SECRET_KEY", "chave-de-teste-" + "x" * 32)  # o Settings exige 32+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy import text  # noqa: E402
