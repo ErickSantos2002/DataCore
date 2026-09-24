@@ -58,7 +58,7 @@ Qualquer falha no callback vira `302 → {FRONTEND_URL}/login?erro_sso=<código>
 
 | Rota | O que faz |
 |---|---|
-| `GET /auth/microsoft` | Gera `state` (`secrets.token_urlsafe(32)`), grava no cookie `sso_state` e redireciona para a autorização da Microsoft (`scope=openid email profile User.Read`, `response_mode=query`). Com o SSO desligado, redireciona para `/login?erro_sso=sso_desligado`. |
+| `GET /auth/microsoft` | Gera `state` (`secrets.token_urlsafe(32)`), grava no cookie `sso_state` e redireciona para a autorização da Microsoft (`scope=openid email profile User.Read`, `response_mode=query`). Com o SSO desligado, redireciona para `/login?erro_sso=sso_desligado`; sem `FRONTEND_URL` não há para onde mandar, e responde 404. |
 | `GET /auth/microsoft/callback` | Valida `state`, troca `code`, lê o e-mail, acha o usuário, emite o ticket e redireciona para o front. Sempre apaga o cookie `sso_state`. |
 | `POST /auth/sso/exchange` | Corpo `{"ticket": str}`. Resgata o ticket e devolve `TokenSaida` (`access_token`, `token_type`, `role`, `username`, `user_id`). Ticket inexistente, vencido ou já usado: `400 "Link de acesso inválido ou expirado."`. |
 | `GET /auth/sso/status` | `{"ativo": bool}` — o front mostra o botão só com `true`. |
@@ -108,7 +108,8 @@ Tabela `auth.sso_tickets` (migration Alembic `0002`):
 | `access_token` | `text NOT NULL` |
 | `expira_em` | `timestamptz NOT NULL` — agora + 60 s |
 
-SQL direto com `text()`, sem modelo ORM: são dois comandos.
+SQL direto com `text()`. A tabela tem também um modelo ORM (`app/models/sso_ticket.py`),
+só para o `alembic check` do `test_migrations.py` não acusar a tabela como sobra.
 
 - `emitir(db, access_token) -> str` — insere e devolve o ticket.
 - `resgatar(db, ticket) -> str | None` — na mesma transação:
@@ -246,6 +247,7 @@ variáveis, `/sso/status` responde desligado e o front esconde o botão.
 | `backend/app/core/config.py` | cinco variáveis + `sso_ativo` |
 | `backend/app/core/microsoft.py` | criar |
 | `backend/app/core/sso_tickets.py` | criar |
+| `backend/app/models/sso_ticket.py` | criar (modelo para o `alembic check`) |
 | `backend/app/api/endpoints/auth.py` | quatro rotas |
 | `backend/app/schemas/auth.py` | `TicketEntrada`, `SsoStatus` |
 | `backend/.env.example` | bloco do SSO |
