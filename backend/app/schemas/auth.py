@@ -93,6 +93,15 @@ class TokenSaida(BaseModel):
     user_id: int
 
 
+class TicketEntrada(BaseModel):
+    # O ticket tem 43 caracteres; o teto barra lixo grande antes do banco.
+    ticket: str = Field(max_length=200)
+
+
+class SsoStatus(BaseModel):
+    ativo: bool
+
+
 class UsuarioCriar(BaseModel):
     username: Username
     password: Senha

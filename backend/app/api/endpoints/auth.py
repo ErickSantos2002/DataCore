@@ -1,16 +1,22 @@
+import secrets
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import microsoft, sso_tickets
+from app.core.config import settings
 from app.core.security import (
     PAPEL_ADMIN,
     criar_token,
     exigir_admin,
     gerar_hash_senha,
+    logger,
     usuario_atual,
+    usuario_do_token,
     verificar_senha,
 )
 from app.models.database import SessionLocal
@@ -19,10 +25,13 @@ from app.models.usuario import Usuario
 from app.schemas.auth import (
     LoginEntrada,
     PapelOut,
+    SsoStatus,
+    TicketEntrada,
     TokenSaida,
     UsuarioAtualizar,
     UsuarioCriar,
     UsuarioOut,
+    _normalizar_email,
 )
 
 # Substitui o authapi para o DataCoreHS. Caminhos e JSON iguais aos dele; o front
@@ -188,3 +197,117 @@ def excluir_usuario(user_id: int, db: Session = Depends(get_db), admin: Usuario 
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     db.delete(usuario)
     db.commit()
+
+
+# ---------------------------------------------------------------- login com Microsoft
+#
+# Fluxo e decisões: docs/superpowers/specs/2026-09-24-login-microsoft-design.md.
+# Quem não tem usuário com o e-mail da conta Microsoft não entra (não há cadastro
+# automático). Excluir o usuário aqui continua sendo o que corta o acesso.
+
+COOKIE_STATE = "sso_state"
+CAMINHO_COOKIE = "/auth/microsoft"  # cobre /auth/microsoft/callback
+TICKET_INVALIDO = "Link de acesso inválido ou expirado."
+
+
+def _para_o_front(caminho: str) -> RedirectResponse:
+    if not settings.FRONTEND_URL:
+        # Sem FRONTEND_URL não há para onde mandar a pessoa.
+        raise HTTPException(status_code=404, detail="Login com Microsoft não configurado.")
+    return RedirectResponse(settings.FRONTEND_URL.rstrip("/") + caminho, status_code=302)
+
+
+def _erro_sso(codigo: str) -> RedirectResponse:
+    return _para_o_front(f"/login?erro_sso={codigo}")
+
+
+# GET /auth/sso/status
+@router.get("/sso/status", response_model=SsoStatus)
+def sso_status():
+    return SsoStatus(ativo=settings.sso_ativo)
+
+
+# GET /auth/microsoft — o botão do front navega para cá
+@router.get("/microsoft")
+def iniciar_login_microsoft():
+    if not settings.sso_ativo:
+        return _erro_sso("sso_desligado")
+    state = secrets.token_urlsafe(32)
+    resposta = RedirectResponse(microsoft.url_de_autorizacao(state), status_code=302)
+    # O state no cookie impede login CSRF: sem ele, alguém com conta mandaria um
+    # link que faz outra pessoa entrar na conta DELE.
+    resposta.set_cookie(
+        COOKIE_STATE, state, max_age=600, path=CAMINHO_COOKIE,
+        secure=True, httponly=True, samesite="lax",
+    )
+    return resposta
+
+
+def _resultado_do_callback(
+    request: Request, code: Optional[str], state: Optional[str], error: Optional[str], db: Session
+) -> RedirectResponse:
+    if not settings.sso_ativo:
+        return _erro_sso("sso_desligado")
+
+    guardado = request.cookies.get(COOKIE_STATE) or ""
+    # compare_digest sobre bytes: sobre str ele levanta TypeError com acento, e o
+    # state vem da query string — seria um 500 esperando acontecer.
+    if not state or not guardado or not secrets.compare_digest(state.encode(), guardado.encode()):
+        return _erro_sso("state_invalido")
+
+    if error:
+        return _erro_sso("cancelado" if error == "access_denied" else "falha_microsoft")
+    if not code:
+        return _erro_sso("falha_microsoft")
+
+    try:
+        email_cru = microsoft.email_do_usuario(microsoft.trocar_code_por_token(code))
+    except microsoft.ErroMicrosoft as erro:
+        logger.warning("Login com Microsoft falhou: %s", erro)
+        return _erro_sso("falha_microsoft")
+
+    try:
+        email = _normalizar_email(email_cru)
+    except ValueError:
+        email = None
+    usuario = db.query(Usuario).filter(Usuario.email == email).first() if email else None
+    if usuario is None:
+        logger.info("Login com Microsoft sem usuário no DataCore: %r", email_cru)
+        return _erro_sso("usuario_nao_encontrado")
+
+    ticket = sso_tickets.emitir(db, criar_token(usuario))
+    return _para_o_front(f"/auth/callback?ticket={ticket}")
+
+
+# GET /auth/microsoft/callback — a Microsoft devolve a pessoa para cá
+@router.get("/microsoft/callback")
+def callback_microsoft(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    resposta = _resultado_do_callback(request, code, state, error, db)
+    resposta.delete_cookie(
+        COOKIE_STATE, path=CAMINHO_COOKIE, secure=True, httponly=True, samesite="lax"
+    )
+    return resposta
+
+
+# POST /auth/sso/exchange — o front troca o ticket pelo token
+@router.post("/sso/exchange", response_model=TokenSaida)
+def trocar_ticket(dados: TicketEntrada, db: Session = Depends(get_db)):
+    token = sso_tickets.resgatar(db, dados.ticket)
+    # usuario_do_token relê do banco: se o usuário foi excluído nos 60 s do
+    # ticket, a troca falha em vez de entregar um token de quem não existe mais.
+    usuario = usuario_do_token(token) if token else None
+    if usuario is None:
+        raise HTTPException(status_code=400, detail=TICKET_INVALIDO)
+    return TokenSaida(
+        access_token=token,
+        token_type="bearer",
+        role=usuario.papel.nome,
+        username=usuario.username,
+        user_id=usuario.id,
+    )

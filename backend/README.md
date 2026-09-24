@@ -54,6 +54,23 @@ backend/
 
 Os endpoints de dados requerem um token **Bearer** obtido em `POST /auth/login`. Com `AUTH_OBRIGATORIA=false` (padrão durante transição), requisições sem token ainda passam mas são registradas no log.
 
+### Login com Microsoft (Entra ID)
+
+Botão "Entrar com Microsoft" na tela de login, somado ao login por senha. Entra
+quem tem usuário com o **e-mail** da conta Microsoft cadastrado; não há cadastro
+automático. Spec: `docs/superpowers/specs/2026-09-24-login-microsoft-design.md`.
+
+- Configuração: `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`,
+  `MS_REDIRECT_URI`, `FRONTEND_URL` (ver `.env.example`). Qualquer uma vazia
+  desliga o SSO, e o front esconde o botão.
+- O client secret do Entra **vence**. Quando vencer, o botão passa a devolver
+  "Não foi possível entrar com a Microsoft" e o log mostra `troca do code: HTTP 401`.
+  Gerar outro no portal e trocar no EasyPanel.
+- O ticket entre o callback e o front mora em `auth.sso_tickets` (60 s, uso
+  único), e não em memória: dá para subir workers e réplicas sem quebrar o login.
+- Desativar a conta no Entra só barra logins novos: o token já emitido vale até
+  vencer (8 h). Para cortar na hora, excluir o usuário aqui.
+
 ---
 
 ## 🧪 Como rodar localmente
