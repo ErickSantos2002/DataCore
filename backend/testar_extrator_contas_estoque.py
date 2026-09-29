@@ -34,9 +34,10 @@ from app.models.estoque import Estoque  # noqa: E402
 from app.services.tiny_api import (TinyAPI, TinyAPIError, TinyNaoLocalizado,  # noqa: E402
                                    TinySemRegistros)
 from app.services.tiny_contas import (marcar_excluida_na_origem,  # noqa: E402
-                                      normalizar_conta, salvar_conta)
+                                      normalizar_conta, resumo_confere, salvar_conta)
 from app.services.tiny_estoque import normalizar_produto, salvar_produto  # noqa: E402
-from app.jobs.extrair_contas import ids_em_aberto_no_banco  # noqa: E402
+from app.jobs.extrair_contas import (ids_em_aberto_no_banco, montar_argumentos,  # noqa: E402
+                                     processar)
 
 falhas = []
 
@@ -303,6 +304,91 @@ def main():
     # updated_at continua NULL de propósito: linha nunca atualizada não tem o que datar.
     checa("updated_at segue vazio até a primeira mudança de verdade",
           nova.updated_at is None, str(nova.updated_at))
+
+    print("\n5g. Conta lançada com emissão retroativa entra na janela padrão")
+    # Medido em 2026-09-29: o financeiro lança a conta a pagar JÁ PAGA e com a emissão
+    # original, 30 a 60 dias depois — as de agosto entraram no Tiny em 11-12/09 e 22-23/09.
+    # A janela de 14 dias nunca as via, e por estarem pagas também não caíam na
+    # reconferência de abertas: faltavam 159 contas de agosto (R$ 445.737) no banco.
+    checa("a janela padrão cobre 60 dias de atraso com folga",
+          montar_argumentos([]).dias >= 90, str(montar_argumentos([]).dias))
+
+    print("\n5h. O que a pesquisa já mostra igual ao banco não gasta chamada de detalhe")
+    # É o que deixa a janela larga barata: a pesquisa devolve situação, valor, saldo,
+    # vencimento e emissão de 100 contas por chamada; o `obter` é uma chamada por conta.
+    salvar_conta(db, "pagar", conta_exemplo(id="600000001", situacao="pago", saldo="0",
+                                            liquidacao="20/08/2026"))
+    guardada = db.query(ContasPagar).filter(ContasPagar.id_tiny == 600000001).one()
+
+    def resumo(**sobrescreve):
+        """Uma conta no formato que `contas.pagar.pesquisa.php` devolve."""
+        r = {"id": "600000001", "nome_cliente": "Secretaria da Fazenda",
+             "historico": "SEFAZ/DAE-10 (ICMS)", "numero_doc": "",
+             "data_vencimento": "15/07/2026", "situacao": "pago",
+             "data_emissao": "25/08/2026", "valor": "50389.30", "saldo": 0}
+        r.update(sobrescreve)
+        return r
+
+    checa("resumo igual ao banco confere", resumo_confere("pagar", guardada, resumo()))
+    checa("saldo inteiro 0 confere com numeric 0.00",
+          resumo_confere("pagar", guardada, resumo(saldo=0)))
+    for campo, valor in (("situacao", "aberto"), ("valor", "50000.00"), ("saldo", "10.00"),
+                         ("data_vencimento", "16/07/2026"), ("data_emissao", "24/08/2026")):
+        checa(f"{campo} diferente não confere",
+              not resumo_confere("pagar", guardada, resumo(**{campo: valor})))
+    checa("conta que não está no banco não confere",
+          not resumo_confere("pagar", None, resumo()))
+    guardada.excluida_na_origem_em = datetime.now()
+    db.commit()
+    checa("conta marcada como excluída não confere (tem que ser desmarcada pelo detalhe)",
+          not resumo_confere("pagar", guardada, resumo()))
+    guardada.excluida_na_origem_em = None
+    db.commit()
+
+    class APIContasFalsa(TinyAPI):
+        """Pesquisa e detalhe de contas, sem rede, registrando cada `obter`."""
+
+        def __init__(self, periodo, abertas, detalhes):
+            self.periodo, self.abertas, self.detalhes = periodo, abertas, detalhes
+            self.obtidas = []
+
+        def pesquisar_contas(self, tipo, data_inicial, data_final=None):
+            yield from self.periodo
+
+        def pesquisar_contas_em_aberto(self, tipo):
+            yield from self.abertas
+
+        def obter_conta(self, tipo, id_tiny):
+            self.obtidas.append(id_tiny)
+            if id_tiny not in self.detalhes:
+                raise TinyNaoLocalizado("Conta a pagar não localizada")
+            return self.detalhes[id_tiny]
+
+    # 600000001: igual ao banco · 600000002: nova, lançada já paga ·
+    # 600000003: está no banco aberta e foi paga · 600000004: aberta no banco e sumiu do Tiny
+    salvar_conta(db, "pagar", conta_exemplo(id="600000003", situacao="aberto"))
+    salvar_conta(db, "pagar", conta_exemplo(id="600000004", situacao="aberto"))
+    paga = dict(situacao="pago", saldo="0", liquidacao="20/08/2026")
+    api = APIContasFalsa(
+        periodo=[resumo(), resumo(id="600000002"), resumo(id="600000003")],
+        abertas=[],
+        detalhes={"600000002": conta_exemplo(id="600000002", **paga),
+                  "600000003": conta_exemplo(id="600000003", **paga)})
+    contagem, erros = processar(api, db, "pagar", montar_argumentos(["--tipo", "pagar"]))
+    checa("a conta igual ao banco não foi detalhada", "600000001" not in api.obtidas,
+          str(api.obtidas))
+    checa("a nova e a alterada foram detalhadas",
+          {"600000002", "600000003"} <= set(api.obtidas), str(api.obtidas))
+    checa("a conta nova, lançada já paga, entrou no banco",
+          db.query(ContasPagar).filter(ContasPagar.id_tiny == 600000002).count() == 1)
+    checa("a paga no Tiny virou paga aqui", db.query(ContasPagar).filter(
+        ContasPagar.id_tiny == 600000003).one().situacao == "pago")
+    checa("a aberta no banco fora de toda pesquisa ainda é conferida (e marcada)",
+          "600000004" in api.obtidas and db.query(ContasPagar).filter(
+              ContasPagar.id_tiny == 600000004).one().excluida_na_origem_em is not None,
+          str(api.obtidas))
+    checa("a pulada conta como inalterada", contagem.get("inalterada") == 1, str(contagem))
+    checa("sem erros", erros == 0, str(erros))
 
     print("\n6. Produto novo entra — inclusive o das páginas que o n8n não inseria")
     relato = salvar_produto(db, produto_exemplo(), saldo="7")

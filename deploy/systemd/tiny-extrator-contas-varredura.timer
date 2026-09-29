@@ -1,0 +1,11 @@
+# Domingo às 10h UTC, no lugar da carga diária (ver `tiny-extrator-contas.timer`).
+[Unit]
+Description=Varredura semanal de 365 dias das contas do Tiny
+
+[Timer]
+OnCalendar=Sun *-*-* 10:00:00 UTC
+Persistent=true
+Unit=tiny-extrator-contas-varredura.service
+
+[Install]
+WantedBy=timers.target

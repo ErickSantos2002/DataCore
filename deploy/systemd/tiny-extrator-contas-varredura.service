@@ -1,0 +1,19 @@
+# Varredura semanal das contas: a mesma carga diária, com janela de 365 dias.
+#
+# Rede de segurança para conta lançada com emissão MUITO retroativa. Em 2026-09-29
+# faltavam 295 contas a pagar de mai–ago no banco: o financeiro as lançou já pagas, com a
+# emissão original, de 30 a 60 dias depois, e a janela de 14 dias nunca as via. A diária
+# passou a 90 dias; esta pega o que vier ainda mais tarde.
+#
+# Unidade própria (e não o template `tiny-extrator@`) porque o template não passa
+# argumentos ao job.
+[Unit]
+Description=Varredura de 365 dias das contas a pagar e a receber do Tiny
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/datacore-jobs/rodar-job.sh extrair_contas --dias 365
+StandardOutput=journal
+StandardError=journal

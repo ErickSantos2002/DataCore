@@ -161,6 +161,26 @@ def _equivalente(atual: Any, novo: Any) -> bool:
     return atual == novo
 
 
+def resumo_confere(tipo: str, registro, resumo: dict) -> bool:
+    """A linha da pesquisa já mostra que a conta está igual ao banco?
+
+    A pesquisa devolve 100 contas por chamada com situação, valor, saldo, vencimento e
+    emissão; o `obter` custa uma chamada por conta. Conferir por aqui é o que deixa a
+    janela de 90 dias mais barata que a antiga de 14 — medido em 2026-09-29, os 742
+    resumos de jul–set que já estavam no banco batiam nos cinco campos.
+
+    Conta marcada como excluída nunca confere: é o detalhe que a desmarca.
+    """
+    if registro is None or registro.excluida_na_origem_em is not None:
+        return False
+    return (_txt(resumo.get("situacao")) == registro.situacao
+            and _num(resumo.get("valor")) == registro.valor
+            and _num(resumo.get("saldo")) == registro.saldo
+            and _data(resumo.get("data_vencimento")) == registro.vencimento
+            and _data(resumo.get("data_emissao"))
+            == getattr(registro, CONFIG[tipo]["coluna_data_emissao"]))
+
+
 def marcar_excluida_na_origem(db: Session, tipo: str, id_tiny: str,
                               *, dry_run: bool = False) -> Optional[str]:
     """A origem respondeu "não localizada" para esta conta: registra o fato na linha.

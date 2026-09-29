@@ -222,6 +222,18 @@ depois de emitida. Por isso a carga tem duas partes:
 2. **reconferência de tudo que está em aberto**, de qualquer data — é o que percebe
    pagamento. Desligável com `--sem-reconferir`, mas aí a carga volta a ser cega a isso.
 
+**A janela é de 90 dias, não 14.** Em 2026-09-29 faltavam **295 contas a pagar de mai–ago
+(R$ 727 mil)** no banco: o financeiro lança a conta **já paga e com a emissão original**,
+de 30 a 60 dias depois (as de agosto entraram no Tiny em 11-12/09 e 22-23/09). Fora da
+janela e nunca em aberto, nenhuma das duas partes a via. Contas a receber não tinham o
+buraco — são lançadas na emissão.
+
+A janela larga não custa mais porque **a pesquisa já traz o resumo** (situação, valor,
+saldo, vencimento, emissão) de 100 contas por chamada: conta cujo resumo bate com o banco
+não recebe o `obter`, que é uma chamada por conta. Só conta nova, alterada, marcada como
+excluída ou aberta no banco e ausente das pesquisas é detalhada. Aos domingos a carga
+roda com `--dias 365` (`tiny-extrator-contas-varredura`), para o que vier ainda mais tarde.
+
 ### Estoque
 
 ```bash
@@ -269,7 +281,8 @@ VPS, em `deploy/`:
 | timer | horário (UTC) | substitui |
 |---|---|---|
 | `tiny-extrator-notas` | 04:00 e 15:00 | `Puxar_Notas` |
-| `tiny-extrator-contas` | 10:00 | `Puxar_Contas_Pagar` + `Puxar_Contas_Receber` |
+| `tiny-extrator-contas` | 10:00, seg–sáb | `Puxar_Contas_Pagar` + `Puxar_Contas_Receber` |
+| `tiny-extrator-contas-varredura` | 10:00, dom | nada — a mesma carga com `--dias 365` |
 | `tiny-extrator-estoque` | 16:00 | `Atualizar estoque` |
 | `tiny-extrator-nfse` | 04:30 | nada — antes dependia de chamar `POST /notas_servico/importar` à mão |
 
@@ -290,7 +303,7 @@ scp deploy/systemd/* <vps>:/etc/systemd/system/
 # na VPS
 systemctl daemon-reload
 systemctl enable --now tiny-extrator-notas.timer tiny-extrator-contas.timer tiny-extrator-estoque.timer \
-    tiny-extrator-nfse.timer
+    tiny-extrator-nfse.timer tiny-extrator-contas-varredura.timer
 journalctl -u 'tiny-extrator@*' -f     # acompanhar
 ```
 

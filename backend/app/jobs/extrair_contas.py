@@ -7,7 +7,8 @@
 
 A carga tem duas partes, e a segunda é a que o n8n não tinha:
 
-1. **janela por emissão** (padrão 14 dias) — traz conta nova;
+1. **janela por emissão** (padrão 90 dias) — traz conta nova, inclusive a lançada com
+   emissão retroativa (ver abaixo);
 2. **reconferência do que está em aberto**, de qualquer data — é o que percebe que uma
    conta antiga foi paga. Sem isso o banco acumula passivo fantasma: em 2026-09-03 ele
    dizia 226 contas a pagar em aberto (R$ 962 mil) contra 3 no Tiny.
@@ -30,6 +31,12 @@ a linha é a prova de que o atraso existiu, e a silver é quem filtra.
 Enquanto isso era contado como erro, o job terminava `exit 1` **todo dia** — 226 contas a
 pagar e 41 a receber em 2026-09-05. O estrago não era o código de saída feio: era o alarme
 queimado, porque uma falha nova ficava indistinguível do barulho de sempre.
+
+A janela era de 14 dias até 2026-09-29, quando faltavam 295 contas a pagar de mai–ago no
+banco: o financeiro lança a conta **já paga, com a emissão original**, 30 a 60 dias
+depois. Fora da janela e nunca em aberto, nenhuma das partes a via. A janela larga sai
+barata porque a pesquisa traz o resumo da conta, e o que já bate com o banco não recebe o
+`obter` (ver `resumo_confere`). Aos domingos o timer roda com `--dias 365`.
 """
 
 from __future__ import annotations
@@ -44,7 +51,8 @@ from app.models.database import SessionLocal
 from app.services.execucao import registrar_execucao
 from app.services.tiny_api import (ESPERA_PADRAO, TinyAPI, TinyAPIError,
                                    TinyNaoLocalizado, TinySemRegistros)
-from app.services.tiny_contas import CONFIG, marcar_excluida_na_origem, salvar_conta
+from app.services.tiny_contas import (CONFIG, marcar_excluida_na_origem, resumo_confere,
+                                      salvar_conta)
 
 logger = logging.getLogger("extrair_contas")
 
@@ -53,7 +61,7 @@ def montar_argumentos(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Extrai contas a pagar/receber do Tiny.")
     p.add_argument("--tipo", choices=["pagar", "receber", "ambos"], default="ambos")
     janela = p.add_mutually_exclusive_group()
-    janela.add_argument("--dias", type=int, default=14, help="dias para trás (padrão: 14)")
+    janela.add_argument("--dias", type=int, default=90, help="dias para trás (padrão: 90)")
     janela.add_argument("--desde", type=date.fromisoformat, metavar="AAAA-MM-DD")
     p.add_argument("--ate", type=date.fromisoformat, metavar="AAAA-MM-DD")
     p.add_argument("--sem-reconferir", action="store_true",
@@ -80,32 +88,50 @@ def ids_em_aberto_no_banco(db, tipo: str) -> list[str]:
     return [str(linha[0]) for linha in linhas if linha[0] is not None]
 
 
+def registros_por_id(db, tipo: str, ids) -> dict:
+    """As linhas do banco para os ids da pesquisa, numa consulta só."""
+    modelo = CONFIG[tipo]["modelo"]
+    numeros = [int(i) for i in ids]
+    if not numeros:
+        return {}
+    return {str(r.id_tiny): r for r in db.query(modelo).filter(modelo.id_tiny.in_(numeros))}
+
+
 def processar(api: TinyAPI, db, tipo: str, args) -> tuple[dict, int]:
     inicio = args.desde or (date.today() - timedelta(days=args.dias))
     fim = args.ate or date.today()
 
-    ids: list[str] = []
-    vistos: set[str] = set()
+    resumos: dict[str, dict] = {}
     for origem, gerador in (
-        ("emitidas no período", api.pesquisar_ids_de_contas(tipo, inicio, fim)),
+        ("emitidas no período", api.pesquisar_contas(tipo, inicio, fim)),
         ("em aberto no Tiny",
-         iter(()) if args.sem_reconferir else api.pesquisar_ids_de_contas_em_aberto(tipo)),
-        ("em aberto no banco",
-         iter(()) if args.sem_reconferir else iter(ids_em_aberto_no_banco(db, tipo))),
+         iter(()) if args.sem_reconferir else api.pesquisar_contas_em_aberto(tipo)),
     ):
         try:
-            novos = [i for i in gerador if i not in vistos]
+            novos = [r for r in gerador if r["id"] not in resumos]
         except TinyAPIError as erro:
             logger.error("  falha na pesquisa (%s): %s", origem, erro)
             return {}, 1
-        vistos.update(novos)
-        ids.extend(novos)
+        resumos.update((r["id"], r) for r in novos)
         logger.info("   %-28s %d", origem + ":", len(novos))
+
+    do_banco = [] if args.sem_reconferir else [
+        i for i in ids_em_aberto_no_banco(db, tipo) if i not in resumos]
+    logger.info("   %-28s %d", "em aberto no banco:", len(do_banco))
+
+    # O que a pesquisa já mostra igual ao banco não precisa do `obter`, uma chamada por
+    # conta. O que ficou só no banco precisa sempre: é ele que descobre a conta sumida.
+    registros = registros_por_id(db, tipo, resumos)
+    ids = [i for i, r in resumos.items() if not resumo_confere(tipo, registros.get(i), r)]
+    contagem: dict[str, int] = {}
+    if len(ids) < len(resumos):
+        contagem["inalterada"] = len(resumos) - len(ids)
+    ids += do_banco
+    logger.info("   %-28s %d", "a detalhar:", len(ids))
 
     if args.limite:
         ids = ids[:args.limite]
 
-    contagem: dict[str, int] = {}
     erros = 0
     for i, id_tiny in enumerate(ids, 1):
         try:

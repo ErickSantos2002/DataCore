@@ -212,20 +212,24 @@ class TinyAPI:
     # Por isso existe `pesquisar_contas_por_situacao`: além da janela por emissão, a
     # carga reconfere tudo que ainda está em aberto, sem limite de data.
 
-    def pesquisar_ids_de_contas(self, tipo: str, data_inicial: date,
-                                data_final: Optional[date] = None) -> Iterator[str]:
-        """Ids das contas emitidas no período."""
+    #
+    # As pesquisas devolvem o RESUMO de cada conta (id, situação, valor, saldo, vencimento,
+    # emissão), não só o id: com ele o job descobre sem `obter` o que não mudou.
+
+    def pesquisar_contas(self, tipo: str, data_inicial: date,
+                         data_final: Optional[date] = None) -> Iterator[dict]:
+        """Resumo das contas emitidas no período."""
         yield from self._pesquisar_contas(tipo, {
             "data_ini_emissao": data_inicial.strftime("%d/%m/%Y"),
             **({"data_fim_emissao": data_final.strftime("%d/%m/%Y")} if data_final else {}),
         })
 
-    def pesquisar_ids_de_contas_em_aberto(self, tipo: str) -> Iterator[str]:
-        """Ids de tudo que o Tiny ainda considera não quitado, de qualquer data."""
+    def pesquisar_contas_em_aberto(self, tipo: str) -> Iterator[dict]:
+        """Resumo de tudo que o Tiny ainda considera não quitado, de qualquer data."""
         for situacao in ("aberto", "parcial"):
             yield from self._pesquisar_contas(tipo, {"situacao": situacao})
 
-    def _pesquisar_contas(self, tipo: str, filtros: dict) -> Iterator[str]:
+    def _pesquisar_contas(self, tipo: str, filtros: dict) -> Iterator[dict]:
         pagina = 1
         while True:
             try:
@@ -237,7 +241,7 @@ class TinyAPI:
             for item in retorno.get("contas") or []:
                 conta = item.get("conta") or item
                 if conta.get("id"):
-                    yield str(conta["id"])
+                    yield {**conta, "id": str(conta["id"])}
             total = int(retorno.get("numero_paginas") or 1)
             if pagina >= total:
                 return
