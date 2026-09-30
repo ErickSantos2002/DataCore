@@ -12,6 +12,7 @@ import {
   horariosLegiveis,
   resumoDaDuracao,
   rotuloDaExecucao,
+  LIMITE_RODANDO_MS,
   rotuloDoEstado,
   tempoAte,
 } from "./importacoes";
@@ -274,10 +275,36 @@ describe("histórico", () => {
       resultado: null,
       duracao_seg: null,
     };
-    expect(rotuloDaExecucao(interrompida)).toEqual({
+    const seisHorasDepois = new Date(
+      new Date(interrompida.inicio).getTime() + 6 * 3600_000,
+    );
+    expect(rotuloDaExecucao(interrompida, seisHorasDepois)).toEqual({
       texto: "Interrompida",
       tom: "alerta",
     });
+  });
+
+  it("execução sem fim há menos de 3 horas está rodando, não interrompida", () => {
+    const rodando: Execucao = {
+      ...EXECUCAO_BASE,
+      fim: null,
+      resultado: null,
+      duracao_seg: null,
+    };
+    const minutosDepois = new Date(
+      new Date(rodando.inicio).getTime() + 2 * 60_000,
+    );
+    expect(rotuloDaExecucao(rodando, minutosDepois)).toEqual({
+      texto: "Rodando agora",
+      tom: "info",
+    });
+    // No limite ainda conta como viva; um minuto depois, não.
+    const noLimite = new Date(
+      new Date(rodando.inicio).getTime() + LIMITE_RODANDO_MS,
+    );
+    expect(rotuloDaExecucao(rodando, noLimite).texto).toBe("Rodando agora");
+    const passou = new Date(noLimite.getTime() + 60_000);
+    expect(rotuloDaExecucao(rodando, passou).texto).toBe("Interrompida");
   });
 
   it("chama de falha quem terminou com erro", () => {

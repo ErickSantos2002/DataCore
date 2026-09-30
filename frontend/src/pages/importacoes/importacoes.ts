@@ -254,10 +254,25 @@ export function agruparPorDia(execucoes: Execucao[]): DiaDeExecucoes[] {
   return dias;
 }
 
+/**
+ * Até quando uma execução sem `fim` ainda é tratada como viva. Mesmo corte da
+ * view `operacao.avisos_cargas` (migration 007): passou disso, não dá mais para
+ * acreditar que esteja rodando.
+ */
+export const LIMITE_RODANDO_MS = 3 * 60 * 60 * 1000;
+
 /** Como terminou uma execução do histórico, para o selo da linha. */
-export function rotuloDaExecucao(execucao: Execucao): RotuloDeEstado {
+export function rotuloDaExecucao(
+  execucao: Execucao,
+  agora: Date = new Date(),
+): RotuloDeEstado {
   if (execucao.fim === null) {
-    return { texto: "Interrompida", tom: "alerta" };
+    // Sem `fim` também é a carga em andamento — o registro nasce no primeiro
+    // instante. Chamar isso de "Interrompida" dizia que uma carga viva morreu.
+    const idade = agora.getTime() - new Date(execucao.inicio).getTime();
+    return idade <= LIMITE_RODANDO_MS
+      ? ROTULOS.rodando
+      : { texto: "Interrompida", tom: "alerta" };
   }
   if (execucao.resultado === "falha" || execucao.erros > 0) {
     return { texto: "Falhou", tom: "erro" };
