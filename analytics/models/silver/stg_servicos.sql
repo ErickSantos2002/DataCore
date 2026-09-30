@@ -31,10 +31,11 @@ with bronze as (
 ),
 
 {#
-  Curadoria humana em CSV versionado (item 4.9). `cancelada` NÃO vem da origem: o leiaute
-  nacional entrega cancelamento como Evento separado, ainda não tratado na importação
-  (defeito D11), então alguém marca à mão. São 223 NFS-e — e é isso que
-  impede nota cancelada de contar como faturamento. Perder essa marca numa recarga
+  Curadoria humana em CSV versionado (item 4.9): as 223 NFS-e canceladas marcadas à mão
+  antes de a importação tratar o Evento de cancelamento do leiaute nacional (defeito D11,
+  resolvido em 2026-09-30 — desde então a bronze já chega com `cancelada`). A seed segue
+  valendo para as notas antigas e é ela que impede nota cancelada de contar como
+  faturamento. Perder essa marca numa recarga
   INFLA o faturamento em silêncio, que é o defeito mais caro que este projeto já viu.
 #}
 cancelada_curada as (
@@ -59,9 +60,8 @@ limpo as (
         {{ texto_para_data('"data_de_competência"') }}           as data_competencia,
         {{ texto_para_data('"data_de_cancelamento"') }}          as data_cancelamento,
 
-        -- ⚠️ CURADORIA MANUAL, não vem da origem: o leiaute nacional entrega cancelamento
-        -- como Evento separado, ainda não tratado na importação (defeito D11). NFS-e
-        -- cancelada que ninguém marcou conta como faturamento até hoje.
+        -- A bronze traz `cancelada` do Evento de cancelamento do ADN desde 2026-09-30
+        -- (defeito D11); a seed é a curadoria manual de antes disso.
         -- seed primeiro, bronze de reserva (item 4.9)
         coalesce(cancelada_curada.cancelada, bronze.cancelada, false)   as cancelada,
 

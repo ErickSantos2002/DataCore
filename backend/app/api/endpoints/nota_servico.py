@@ -7,7 +7,7 @@ from app.models.nota_servico import NotaServico as NotaServicoModel
 from app.schemas.nota_servico import NotaServico
 from fastapi.responses import JSONResponse
 from app.services.nfse_recife_nacional import NFSeRecifeNacionalService
-from app.services.nfse_importacao import gravar_notas
+from app.services.nfse_importacao import aplicar_cancelamentos, gravar_notas
 from app.core.config import settings
 import traceback
 
@@ -116,9 +116,10 @@ def importar_nfse_recife(
 
         # Consulta NFSe no ambiente nacional (ADN)
         print(f"Consultando NFSe (ADN nacional) de {data_inicial} até {data_final}...")
-        notas_encontradas = nfse_service.consultar_nfse(data_inicial, data_final)
+        notas_encontradas, cancelamentos = nfse_service.consultar_nfse_e_cancelamentos(
+            data_inicial, data_final)
 
-        if not notas_encontradas:
+        if not notas_encontradas and not cancelamentos:
             return JSONResponse(
                 status_code=200,
                 content={
@@ -130,7 +131,8 @@ def importar_nfse_recife(
                     },
                     "total_encontradas": 0,
                     "total_importadas": 0,
-                    "total_atualizadas": 0
+                    "total_atualizadas": 0,
+                    "total_canceladas": 0
                 }
             )
 
@@ -138,6 +140,8 @@ def importar_nfse_recife(
         # `app/services/nfse_importacao.py`, compartilhada com o job diário
         # `app.jobs.importar_nfse` — uma regra só, dois caminhos de entrada.
         resultado = gravar_notas(db, notas_encontradas)
+        # Cancelamentos vêm como Evento à parte, sem janela de data (ver o job).
+        cancelou = aplicar_cancelamentos(db, cancelamentos)
 
         # Commit das alterações
         db.commit()
@@ -154,6 +158,7 @@ def importar_nfse_recife(
                 "total_encontradas": len(notas_encontradas),
                 "total_importadas": resultado.importadas,
                 "total_atualizadas": resultado.atualizadas,
+                "total_canceladas": cancelou.marcadas,
                 "erros": resultado.erros if resultado.erros else None
             }
         )

@@ -14,6 +14,10 @@ distribuição inteira e filtra a data depois, então a janela larga custa as me
 que a estreita. O que ela compra é tolerância: nota que chega atrasada ao ADN, ou um dia
 em que o timer não rodou, entram na passagem seguinte. Reimportar é seguro — a nota casa
 pela chave de acesso e a curadoria (`cancelada`) nunca é sobrescrita.
+
+CANCELAMENTOS NÃO TÊM JANELA: o evento de cancelamento chega na mesma distribuição, e
+todos são aplicados a cada passagem, seja qual for a data da nota. Nota de julho
+cancelada em setembro é marcada na primeira passagem depois do cancelamento.
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ from datetime import date, timedelta
 from app.core.config import settings
 from app.models.database import SessionLocal
 from app.services.execucao import registrar_execucao
-from app.services.nfse_importacao import gravar_notas
+from app.services.nfse_importacao import aplicar_cancelamentos, gravar_notas
 from app.services.nfse_recife_nacional import NFSeRecifeNacionalService
 
 logger = logging.getLogger("importar_nfse")
@@ -91,7 +95,7 @@ def _importar(args, inicio: date, fim: date, registro) -> int:
     )
 
     try:
-        notas = servico.consultar_nfse(inicio, fim)
+        notas, cancelamentos = servico.consultar_nfse_e_cancelamentos(inicio, fim)
     except Exception as erro:                                  # noqa: BLE001
         # O serviço já retentou cada página 4 vezes (o ADN dá 504 sob carga). Chegar aqui
         # é falha de verdade — e ele levanta em vez de devolver meia lista, então nada foi
@@ -101,11 +105,14 @@ def _importar(args, inicio: date, fim: date, registro) -> int:
             registro.erros = 1
             registro.detalhe = f"ADN: {erro}"
         return 1
-    logger.info("   notas no período: %d", len(notas))
+    logger.info("   notas no período: %d · cancelamentos no ADN: %d", len(notas),
+                len(cancelamentos))
 
     db = SessionLocal()
     try:
         resultado = gravar_notas(db, notas, dry_run=args.dry_run)
+        # Depois das notas: o cancelamento pode ser de uma nota que chegou agora.
+        cancelou = aplicar_cancelamentos(db, cancelamentos, dry_run=args.dry_run)
         if args.dry_run:
             db.rollback()
         else:
@@ -118,18 +125,20 @@ def _importar(args, inicio: date, fim: date, registro) -> int:
 
     if registro is not None:
         registro.contagens = {"no_periodo": len(notas), "criada": resultado.importadas,
-                              "reconferida": resultado.atualizadas}
+                              "reconferida": resultado.atualizadas,
+                              "cancelada": cancelou.marcadas}
         registro.erros = len(resultado.erros)
 
     logger.info("== Resumo ==")
     logger.info("   %-20s %d", "criadas", resultado.importadas)
     logger.info("   %-20s %d", "reconferidas", resultado.atualizadas)
+    logger.info("   %-20s %d", "canceladas agora", cancelou.marcadas)
     if resultado.erros:
         logger.warning("   %-20s %d", "erros", len(resultado.erros))
 
     # Mesmo critério dos extratores: erro em algumas notas não reprova a carga que trouxe o
     # resto; erro sem nada gravado, sim.
-    gravadas = resultado.importadas + resultado.atualizadas
+    gravadas = resultado.importadas + resultado.atualizadas + cancelou.marcadas
     return 1 if resultado.erros and not gravadas else 0
 
 

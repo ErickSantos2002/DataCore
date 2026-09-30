@@ -22,10 +22,10 @@ from app.models.nota_servico import NotaServico as NotaServicoModel
 
 logger = logging.getLogger(__name__)
 
-# Campos que são curadoria NOSSA, não dado da origem: a importação nunca os
-# sobrescreve numa atualização. Hoje só `cancelada`, que é marcada à mão porque o
-# leiaute nacional entrega o cancelamento como Evento separado, ainda não tratado.
-# Sem esta proteção, cada reimportação da nota devolvia a marcação para o padrão.
+# Campos que a gravação da NOTA nunca sobrescreve numa atualização. Hoje só
+# `cancelada`: o XML da nota não diz se ela foi cancelada (o leiaute nacional entrega
+# isso como Evento separado, tratado em `aplicar_cancelamentos`), então regravar a nota
+# devolveria a marcação para o padrão.
 CAMPOS_DE_CURADORIA_LOCAL = {"cancelada"}
 
 
@@ -100,4 +100,46 @@ def gravar_notas(db: Session, notas: Iterable[Dict],
             })
             logger.exception("Erro ao processar NFSe %s: %s", nota_data.get('numero_nfse'), e)
 
+    return resultado
+
+
+@dataclass
+class ResultadoCancelamento:
+    marcadas: int = 0       # estavam valendo e passaram a canceladas
+    ja_marcadas: int = 0    # já estavam canceladas; não mexe (nem na data)
+    sem_nota: int = 0       # evento de nota que não está em tiny.servicos
+
+
+def aplicar_cancelamentos(db: Session, cancelamentos: Iterable[Dict],
+                          dry_run: bool = False) -> ResultadoCancelamento:
+    """Marca `cancelada` e `data_de_cancelamento` nas notas que o ADN diz canceladas.
+
+    Casa pela chave de acesso, como a gravação da nota. Só liga, nunca desliga: não
+    existe evento que "descancele" uma NFS-e. Chamar DEPOIS de `gravar_notas` na mesma
+    sessão, para achar a nota que chegou junto com o próprio cancelamento.
+
+    Defeito D11: até 2026-09-30 os eventos eram descartados e a marcação era só à mão
+    (seed `nfse_cancelada_curada` do dbt), que parou em janeiro. Medido no dia: 52 NFS-e
+    canceladas (jun-set/2026) contando como faturamento.
+    """
+    resultado = ResultadoCancelamento()
+    # O SessionLocal tem autoflush=False: sem isto, a nota que `gravar_notas` acabou de
+    # adicionar não aparece na consulta abaixo e o cancelamento dela passa em branco.
+    db.flush()
+    for evento in cancelamentos:
+        nota = db.query(NotaServicoModel).filter(
+            NotaServicoModel.codigo_verificacao == evento["chave"]
+        ).first() if evento.get("chave") else None
+        if nota is None:
+            resultado.sem_nota += 1
+        elif nota.cancelada:
+            resultado.ja_marcadas += 1
+        else:
+            if not dry_run:
+                nota.cancelada = True
+                # A coluna é texto e já mistura "17/01/2024" e "2024-01-17"; o dbt lê os
+                # dois pelo padrão (macro `texto_para_data`). ISO é o que não é ambíguo.
+                data = evento.get("data_cancelamento")
+                nota.data_cancelamento = data.isoformat() if data else None
+            resultado.marcadas += 1
     return resultado

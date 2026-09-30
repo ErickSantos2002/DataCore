@@ -21,7 +21,7 @@ import base64
 import gzip
 import time
 from datetime import datetime, date
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from xml.etree import ElementTree as ET
 
 import requests
@@ -51,7 +51,24 @@ class NFSeRecifeNacionalService:
         equivalente ao antigo) ou informe o último NSU já processado para busca
         incremental (mais leve e robusto contra instabilidade do ADN).
         """
+        notas, _ = self.consultar_nfse_e_cancelamentos(data_inicial, data_final, desde_nsu)
+        return notas
+
+    def consultar_nfse_e_cancelamentos(self, data_inicial: date, data_final: date,
+                                       desde_nsu: int = 1) -> Tuple[List[Dict], List[Dict]]:
+        """As notas do período (como `consultar_nfse`) e TODOS os cancelamentos da
+        distribuição, numa varredura só.
+
+        Os cancelamentos não passam pelo filtro de data: nota emitida em julho pode ser
+        cancelada em setembro, e o evento é o que diz isso. Como a paginação já percorre
+        a distribuição inteira, pegá-los todos não custa chamada a mais.
+        """
         docs = self._paginar(desde_nsu)
+        return self._notas_do_periodo(docs, data_inicial, data_final), \
+            self.extrair_cancelamentos(docs)
+
+    def _notas_do_periodo(self, docs: List[Dict], data_inicial: date,
+                          data_final: date) -> List[Dict]:
         notas = []
         for doc in docs:
             xml = self._descompactar(doc.get("ArquivoXml"))
@@ -67,6 +84,40 @@ class NFSeRecifeNacionalService:
             if de and (data_inicial <= de <= data_final):
                 notas.append(dados)
         return notas
+
+    # Eventos que desfazem a nota. A distribuição traz outros (manifestação do tomador:
+    # e203202 confirmação, e203206 rejeição) que não mudam o faturamento.
+    EVENTOS_DE_CANCELAMENTO = ("e101101",   # cancelamento
+                               "e105102")   # cancelamento por substituição
+
+    def extrair_cancelamentos(self, docs: List[Dict]) -> List[Dict]:
+        """Um dict por evento de cancelamento: `chave` da nota cancelada, `data_cancelamento`
+        (dia do dhEvento) e `chave_substituta` (só no cancelamento por substituição).
+
+        Não filtra por prestador: o evento de nota em que somos tomador não casa com
+        nenhuma linha de `tiny.servicos`, e quem grava só mexe no que casar.
+        """
+        cancelamentos = []
+        for doc in docs:
+            if doc.get("TipoDocumento") != "EVENTO":
+                continue
+            xml = self._descompactar(doc.get("ArquivoXml"))
+            try:
+                ped = ET.fromstring(xml).find(".//n:infPedReg", self.NS) if xml else None
+            except ET.ParseError:
+                ped = None
+            if ped is None:
+                continue
+            achados = (ped.find(f"n:{t}", self.NS) for t in self.EVENTOS_DE_CANCELAMENTO)
+            tipo = next((el for el in achados if el is not None), None)
+            if tipo is None:
+                continue
+            cancelamentos.append({
+                "chave": self._txt(ped, "n:chNFSe"),
+                "data_cancelamento": self._parse_date(self._txt(ped, "n:dhEvento")),
+                "chave_substituta": self._txt(tipo, "n:chSubstituta"),
+            })
+        return cancelamentos
 
     # -------------------------------------------------------------- HTTP/ADN
     def _paginar(self, desde_nsu: int, max_paginas: int = 80) -> List[Dict]:
@@ -221,10 +272,8 @@ class NFSeRecifeNacionalService:
             "cep_tomador": self._txt(endnac_t, "n:CEP"),
             # `cancelada` NÃO é devolvida de propósito.
             #
-            # No leiaute nacional o cancelamento chega como Evento separado, que este
-            # serviço ainda não trata — ou seja, aqui não se sabe se a nota foi
-            # cancelada. Devolver False seria afirmar o que não se sabe, e o upsert do
-            # endpoint sobrescreveria a marcação feita à mão pela equipe a cada
-            # reimportação. Quem não sabe, não responde: o campo fica de fora e o
-            # endpoint preserva o valor que já está no banco.
+            # No leiaute nacional o cancelamento chega como Evento separado (ver
+            # `extrair_cancelamentos`), então o XML da nota não sabe se ela foi
+            # cancelada. Devolver False seria afirmar o que não se sabe, e a regravação
+            # da nota desfaria o cancelamento já marcado. Quem não sabe, não responde.
         }
