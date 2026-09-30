@@ -43,11 +43,12 @@ POST http://seu-servidor/notas_servico/importar?data_inicial=2025-11-26&data_fin
   "total_encontradas": 2,
   "total_importadas": 2,
   "total_atualizadas": 0,
+  "total_canceladas": 0,
   "erros": null
 }
 ```
 
-## Resposta quando não há notas
+## Resposta quando não há notas nem cancelamentos
 
 ```json
 {
@@ -59,7 +60,8 @@ POST http://seu-servidor/notas_servico/importar?data_inicial=2025-11-26&data_fin
   },
   "total_encontradas": 0,
   "total_importadas": 0,
-  "total_atualizadas": 0
+  "total_atualizadas": 0,
+  "total_canceladas": 0
 }
 ```
 
@@ -227,14 +229,15 @@ print(response.json())
 
 ## Funcionamento Interno
 
-1. **Consulta na Prefeitura**: O endpoint usa o serviço `NFSeRecifeService` que faz requisição SOAP para o Web Service da Prefeitura do Recife
-2. **Parse do XML**: Converte a resposta XML em objetos Python
+1. **Consulta no ADN**: O endpoint (e o job diário `app.jobs.importar_nfse`) usa o `NFSeRecifeNacionalService`, que pagina a distribuição do Ambiente de Dados Nacional por NSU até o último lote. Se a paginação passar de 2.000 páginas, ela falha em vez de devolver a lista cortada (até 30/09/2026 parava calada em 80 páginas)
+2. **Parse do XML**: Converte as notas do período e **todos** os eventos de cancelamento da distribuição (`e101101` cancelamento, `e105102` cancelamento por substituição). Manifestação do tomador também vem como evento e é ignorada
 3. **Verificação de Duplicatas**: Verifica se a NFSe já existe no banco pela **chave de acesso** (50 dígitos, única por documento). O número da NFS-e **não** serve como chave: em 18/06/2026 a numeração reiniciou com a migração para o Emissor Nacional, e casar por número sobrescrevia notas antigas de mesmo número
 4. **Inserção/Atualização**:
    - Se não existe: cria novo registro
    - Se existe: atualiza os dados
-5. **Commit**: Salva todas as alterações no banco de dados
-6. **Resposta**: Retorna JSON com estatísticas da importação
+5. **Cancelamentos**: Depois das notas, marca `cancelada` e `data_de_cancelamento` em cada nota do banco cuja chave casa com um evento. Não há janela de data (nota de julho cancelada em setembro é marcada na próxima passagem), nunca desfaz um cancelamento e ignora evento de nota que não está no banco (as recebidas, em que somos tomador). Até 30/09/2026 os eventos eram descartados, e as notas canceladas contavam como faturamento
+6. **Commit**: Salva todas as alterações no banco de dados
+7. **Resposta**: Retorna JSON com estatísticas da importação
 
 ---
 

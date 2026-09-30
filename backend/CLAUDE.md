@@ -15,14 +15,15 @@ docker compose up -d --build   # na RAIZ do repo: backend + frontend de dev
 python testar_importacao_nfse.py         # exercita POST /notas_servico/importar
 pip install -r requirements-dev.txt
 docker compose -f docker-compose.test.yml up -d --wait   # Postgres dos testes (porta 55432)
-pytest                                    # suíte (só o módulo de auth por enquanto)
+pytest                                    # suíte: auth, fila de atualização, NFS-e
 AUTH_APP_DB_USER=<usuario_app> bash scripts/migrar.sh     # migrations do schema auth (Konsole, superusuário)
 .venv/bin/python scripts/copiar_usuarios_authapi.py   # copia usuários do authapi (Konsole, uma vez)
 ```
 
 Precisa de `.env` (ver `.env.example`) com `DATABASE_URL` apontando pro banco real e
 `SECRET_KEY` (≥32 caracteres).
-A suíte (`tests/`) cobre autenticação, migrations e o script de cópia, e roda
+A suíte (`tests/`) cobre autenticação, migrations, o script de cópia e a importação
+de NFS-e (cancelamento e paginação do ADN), e roda
 contra o Postgres de `docker-compose.test.yml`, nunca contra o `datacore`. As
 rotas de dados antigas não têm teste. `testar_importacao_nfse.py` continua sendo
 script manual contra uma API rodando.
@@ -72,6 +73,16 @@ mas continua exportado em `services/__init__.py`. Os dois devolvem `consultar_nf
 com **exatamente as mesmas chaves de dicionário** — o endpoint de importação faz
 `setattr` genérico em cima delas, então renomear uma chave quebra a gravação em silêncio.
 `NFSE_IMPORTACAO.md` documenta o endpoint e o agendamento no N8N.
+
+**Cancelamento de NFS-e vem do Evento do ADN**, não da nota: `extrair_cancelamentos()`
+lê `e101101`/`e105102` e `aplicar_cancelamentos()` (em `services/nfse_importacao.py`)
+marca `cancelada`, casando pela chave de 50 dígitos. `cancelada` segue fora do dicionário
+da nota de propósito, senão a regravação desfaria a marcação. Notas anteriores a
+18/06/2026, com número e código do Recife, não têm essa chave; o cancelamento delas
+fica na seed `analytics/seeds/nfse_cancelada_curada.csv`. Para casar uma nota nacional
+com uma linha antiga, use o nº do DPS (`número_do_rps` = `nDPS`). A sessão do
+`SessionLocal` tem `autoflush=False`: consulta logo depois de `db.add` precisa de
+`flush()` antes.
 
 Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por base64
 (`NFSE_CERT_BASE64`/`NFSE_KEY_BASE64`, usado em produção/Easypanel, que
