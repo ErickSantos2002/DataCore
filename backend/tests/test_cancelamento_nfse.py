@@ -272,3 +272,32 @@ def test_endpoint_importar_tambem_cancela(db, client, monkeypatch):
     assert r.json()["total_canceladas"] == 1
     db.expire_all()
     assert tuple(_estado(db, id_)) == (True, "2026-09-30")
+
+
+# ------------------------------------------------------------------ paginação do ADN
+
+def _adn_falso(servico, monkeypatch, total_docs):
+    """ADN com `total_docs` documentos, NSU 1..total, lotes de 50 como o real."""
+    monkeypatch.setattr("app.services.nfse_recife_nacional.time.sleep", lambda _: None)
+
+    def buscar_lote(session, nsu):
+        return {"LoteDFe": [{"NSU": n} for n in range(nsu, min(nsu + 50, total_docs + 1))]}
+
+    monkeypatch.setattr(servico, "_buscar_lote", buscar_lote)
+
+
+def test_paginacao_passa_de_80_paginas(servico, monkeypatch):
+    # Até 2026-09-30 a varredura parava em 80 páginas (4.000 documentos) e devolvia a
+    # lista cortada como se fosse completa: nota e cancelamento novos sumiriam calados.
+    _adn_falso(servico, monkeypatch, total_docs=4321)
+
+    docs = servico._paginar(1)
+
+    assert [d["NSU"] for d in docs] == list(range(1, 4322))
+
+
+def test_paginacao_que_nao_termina_falha_em_vez_de_cortar(servico, monkeypatch):
+    _adn_falso(servico, monkeypatch, total_docs=10**9)
+
+    with pytest.raises(Exception, match="não terminou"):
+        servico._paginar(1, max_paginas=5)

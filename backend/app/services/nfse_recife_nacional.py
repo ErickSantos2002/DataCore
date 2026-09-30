@@ -120,10 +120,16 @@ class NFSeRecifeNacionalService:
         return cancelamentos
 
     # -------------------------------------------------------------- HTTP/ADN
-    def _paginar(self, desde_nsu: int, max_paginas: int = 80) -> List[Dict]:
-        """Pagina a distribuição por NSU. Levanta exceção se uma página falhar de
-        vez (melhor falhar e reprocessar depois — o dedupe por chave de acesso
-        evita duplicar — do que importar parcial silenciosamente)."""
+    def _paginar(self, desde_nsu: int, max_paginas: int = 2000) -> List[Dict]:
+        """Pagina a distribuição por NSU até o último lote. Levanta exceção se uma
+        página falhar de vez (melhor falhar e reprocessar depois — o dedupe por chave
+        de acesso evita duplicar — do que importar parcial silenciosamente).
+
+        `max_paginas` é só trava contra laço infinito, e estourá-la também levanta. Até
+        2026-09-30 o teto era 80 páginas (4.000 documentos) e, ao batê-lo, a lista
+        cortada voltava como se fosse completa. Em 30/09 a distribuição tinha ~1.700
+        documentos; 2.000 páginas são 100 mil.
+        """
         docs: List[Dict] = []
         nsu = desde_nsu
         with requests.Session() as session:
@@ -131,14 +137,15 @@ class NFSeRecifeNacionalService:
                 resp = self._buscar_lote(session, nsu)
                 lote = resp.get("LoteDFe") or []
                 if not lote:
-                    break
+                    return docs
                 docs.extend(lote)
-                max_nsu = max(d["NSU"] for d in lote)
                 if len(lote) < 50:        # último lote
-                    break
-                nsu = max_nsu + 1
+                    return docs
+                nsu = max(d["NSU"] for d in lote) + 1
                 time.sleep(0.3)
-        return docs
+        raise Exception(f"Paginação do ADN não terminou em {max_paginas} páginas "
+                        f"({len(docs)} documentos, parou no NSU {nsu}); "
+                        f"aumente max_paginas se a distribuição cresceu de fato")
 
     def _buscar_lote(self, session: requests.Session, nsu: int,
                      tentativas: int = 4) -> Dict:
