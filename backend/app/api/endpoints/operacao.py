@@ -19,12 +19,15 @@ jogaria toda execução posterior às 21h para o dia seguinte, sem erro nenhum.
 from datetime import date
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.security import exigir_admin
 from app.models.database import SessionLocal
+from app.models.usuario import Usuario
+from app.services import pedidos_atualizacao
 
 router = APIRouter(prefix="/operacao", tags=["Operação"])
 
@@ -216,3 +219,42 @@ def historico_de_execucoes(
         itens.append(Execucao(**dados))
 
     return PaginaDeExecucoes(itens=itens, total=total)
+
+
+class PedidoDeAtualizacao(BaseModel):
+    """Um clique no botão "Atualizar dados agora". `resultado` NULL = ainda aberto."""
+
+    id: int
+    pedido_em: Any
+    pedido_por: str
+    iniciado_em: Optional[Any] = None
+    concluido_em: Optional[Any] = None
+    resultado: Optional[str] = None
+    detalhe: Optional[str] = None
+
+
+@router.post("/atualizacao-manual", response_model=PedidoDeAtualizacao, status_code=202)
+def pedir_atualizacao_manual(
+    usuario: Usuario = Depends(exigir_admin),
+    db: Session = Depends(get_db),
+):
+    """Pede notas → NFS-e → dbt agora, fora do horário dos timers.
+
+    202 e não 200: aqui só se grava o pedido. Quem roda é a VPS, pelo timer
+    `datacore-atualizacao-manual` (1 min), e a tela acompanha pelo GET. Com um pedido já
+    aberto, 409 com esse pedido no corpo — dez cliques viram uma atualização só.
+    """
+    try:
+        return pedidos_atualizacao.pedir(db, usuario.username)
+    except pedidos_atualizacao.PedidoEmAndamento as aberto:
+        raise HTTPException(status_code=409, detail={
+            "mensagem": "Já existe uma atualização em andamento.",
+            "pedido": PedidoDeAtualizacao(**aberto.pedido).model_dump(mode="json")
+            if aberto.pedido else None,
+        })
+
+
+@router.get("/atualizacao-manual", response_model=Optional[PedidoDeAtualizacao])
+def ultima_atualizacao_manual(db: Session = Depends(get_db)):
+    """O pedido mais recente, aberto ou não. `null` se o botão nunca foi usado."""
+    return pedidos_atualizacao.ultimo(db)

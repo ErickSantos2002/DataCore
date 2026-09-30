@@ -1,0 +1,11 @@
+# Olha a fila do botão a cada minuto. Unidade oneshot não se sobrepõe: enquanto uma
+# atualização roda, o disparo do minuto seguinte é ignorado pelo systemd.
+[Unit]
+Description=Olha a fila de atualização manual do DataCore a cada minuto
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

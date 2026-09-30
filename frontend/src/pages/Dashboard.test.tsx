@@ -38,6 +38,14 @@ vi.mock("../context/DashboardContext", () => ({
   useDashboard: () => estadoDashboard.atual,
 }));
 
+// O cabeçalho pergunta pela fila do botão de atualização quando o usuário é
+// admin. O botão tem teste próprio (dashboard/CabecalhoMeta.test.tsx); aqui a
+// fila só não pode sair para a rede.
+vi.mock("../services/operacao", () => ({
+  fetchUltimaAtualizacaoManual: vi.fn().mockResolvedValue(null),
+  pedirAtualizacaoManual: vi.fn(),
+}));
+
 const estadoConfiguracoes = vi.hoisted(() => ({
   atual: [] as { id: number; chave: string; valor: string }[],
 }));

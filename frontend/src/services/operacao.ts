@@ -116,3 +116,52 @@ export async function fetchExecucoes(
   });
   return response.data;
 }
+
+/**
+ * Um clique no botão "Atualizar dados agora" da tela Meta do trimestre.
+ *
+ * A API só registra o pedido; quem roda notas → NFS-e → dbt é a VPS, que olha
+ * a fila a cada minuto. `resultado` nulo = ainda aberto (esperando a VPS pegar,
+ * se `iniciado_em` também é nulo; rodando, se não).
+ */
+export interface PedidoDeAtualizacao {
+  id: number;
+  pedido_em: string;
+  pedido_por: string;
+  iniciado_em: string | null;
+  concluido_em: string | null;
+  resultado: "sucesso" | "falha" | "abandonado" | null;
+  detalhe: string | null;
+}
+
+/**
+ * Pede a atualização. Se já houver uma aberta, a API responde 409 com ela —
+ * aqui isso NÃO é erro: devolve o pedido aberto, e a tela passa a acompanhá-lo.
+ */
+export async function pedirAtualizacaoManual(): Promise<PedidoDeAtualizacao> {
+  try {
+    const response = await api.post<PedidoDeAtualizacao>(
+      "/operacao/atualizacao-manual",
+    );
+    return response.data;
+  } catch (err) {
+    const resposta = (
+      err as {
+        response?: {
+          status?: number;
+          data?: { detail?: { pedido?: PedidoDeAtualizacao | null } };
+        };
+      }
+    ).response;
+    const aberto = resposta?.data?.detail?.pedido;
+    if (resposta?.status === 409 && aberto) return aberto;
+    throw err;
+  }
+}
+
+export async function fetchUltimaAtualizacaoManual(): Promise<PedidoDeAtualizacao | null> {
+  const response = await api.get<PedidoDeAtualizacao | null>(
+    "/operacao/atualizacao-manual",
+  );
+  return response.data;
+}

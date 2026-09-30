@@ -19,9 +19,15 @@ shift
 #
 # if/fi e NAO `[ -n "..." ] && ORIGEM=agendada`: com `set -e`, o teste falso devolve 1 e
 # derruba o script inteiro sem imprimir nada. Esse padrao ja custou uma noite neste projeto.
+#
+# `ORIGEM_FORCADA` vence o INVOCATION_ID: o `atender-pedidos.sh` roda sob um timer (logo
+# com INVOCATION_ID), mas executa o clique de alguém no botão da tela, que é manual.
 ORIGEM_JOB="manual"
 if [ -n "${INVOCATION_ID:-}" ]; then
     ORIGEM_JOB="agendada"
+fi
+if [ -n "${ORIGEM_FORCADA:-}" ]; then
+    ORIGEM_JOB="$ORIGEM_FORCADA"
 fi
 
 CONTAINER="$(docker ps --format '{{.Names}}' | grep -m1 "^${PREFIXO}" || true)"

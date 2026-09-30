@@ -1,0 +1,19 @@
+# Atende o botão "Atualizar dados agora" (tela Meta do trimestre): pega o pedido da fila
+# `operacao.pedidos_atualizacao` e roda notas → NFS-e → dbt com origem manual.
+#
+# Instalar na VPS:
+#   cp deploy/systemd/datacore-atualizacao-manual.* /etc/systemd/system/
+#   cp deploy/atender-pedidos.sh deploy/rodar-job.sh deploy/rodar-dbt.sh /opt/datacore-jobs/
+#   systemctl daemon-reload
+#   systemctl enable --now datacore-atualizacao-manual.timer
+[Unit]
+Description=Atualização manual pedida pela tela do DataCore
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/datacore-jobs/atender-pedidos.sh
+# O log vai para o journal: journalctl -u datacore-atualizacao-manual
+StandardOutput=journal
+StandardError=journal

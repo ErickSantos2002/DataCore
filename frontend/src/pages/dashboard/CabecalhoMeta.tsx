@@ -1,34 +1,35 @@
 import { Button, Card } from "../../design-system/ui";
-import { useToast } from "../../components/ToastProvider";
-
-/** Fluxo do n8n que relê as notas do Tiny e reescreve o faturamento. */
-const WEBHOOK_ATUALIZAR_NOTAS =
-  "https://n8n.healthsafetytech.com/webhook/f26ad3d8-e178-4a35-93e2-14ae28d2da55";
+import type { PedidoDeAtualizacao } from "../../services/operacao";
+import { useAtualizacaoManual } from "./useAtualizacaoManual";
 
 export interface CabecalhoMetaProps {
   usuario?: { username: string; role: string } | null;
 }
 
+function hora(instante: string): string {
+  return new Date(instante).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function andamento(pedido: PedidoDeAtualizacao): string {
+  return pedido.iniciado_em
+    ? `Atualizando desde ${hora(pedido.iniciado_em)}`
+    : `Na fila desde ${hora(pedido.pedido_em)}`;
+}
+
 /**
  * Cabeçalho da tela: quem está vendo, o que a tela mede e — só para admin —
- * o botão que manda o n8n reler as notas do Tiny.
+ * o botão que puxa agora as notas fiscais, as notas de serviço e refaz os
+ * dados analíticos, sem esperar o horário dos timers.
  *
  * O botão é secundário de propósito. Ele não é o objetivo da tela: a tela é
- * para olhar o quanto falta para a meta, e reprocessar nota é manutenção.
+ * para olhar o quanto falta para a meta, e atualizar a carga é manutenção.
  */
 export function CabecalhoMeta({ usuario }: CabecalhoMetaProps) {
-  const { sucesso, erro } = useToast();
-
-  async function atualizarNotas() {
-    try {
-      await fetch(WEBHOOK_ATUALIZAR_NOTAS, { method: "GET", mode: "no-cors" });
-      sucesso(
-        "Fluxo de busca de notas acionado. Aguarde cerca de 5 minutos para que todas as notas sejam atualizadas.",
-      );
-    } catch {
-      erro("Não foi possível acionar o fluxo.");
-    }
-  }
+  const admin = usuario?.role === "admin";
+  const { pedido, aberto, enviando, pedir } = useAtualizacaoManual(admin);
 
   return (
     <Card padding="lg">
@@ -50,10 +51,19 @@ export function CabecalhoMeta({ usuario }: CabecalhoMetaProps) {
           </p>
         </div>
 
-        {usuario?.role === "admin" && (
-          <Button variant="secondary" onClick={atualizarNotas}>
-            Atualizar notas de venda
-          </Button>
+        {admin && (
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              variant="secondary"
+              onClick={pedir}
+              loading={enviando || aberto}
+            >
+              Atualizar dados agora
+            </Button>
+            {aberto && pedido && (
+              <p className="text-xs text-conteudo-muted">{andamento(pedido)}</p>
+            )}
+          </div>
         )}
       </div>
     </Card>
