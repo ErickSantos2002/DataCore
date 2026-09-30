@@ -31,9 +31,12 @@ with bronze as (
 ),
 
 {#
-  Curadoria humana em CSV versionado (item 4.9): as 223 NFS-e canceladas marcadas à mão
+  Curadoria humana em CSV versionado (item 4.9): as NFS-e canceladas marcadas à mão
   antes de a importação tratar o Evento de cancelamento do leiaute nacional (defeito D11,
-  resolvido em 2026-09-30 — desde então a bronze já chega com `cancelada`). A seed segue
+  resolvido em 2026-09-30 — desde então a bronze já chega com `cancelada`). Eram 223; em
+  2026-09-30 entraram mais 21 de fev-jun/2026, notas do caminho antigo (ABRASF) cujo
+  cancelamento veio depois da importação e nunca foi relido — achadas cruzando os eventos
+  do ADN por tomador + valor + data, já que essas linhas não têm a chave de 50 dígitos. A seed segue
   valendo para as notas antigas e é ela que impede nota cancelada de contar como
   faturamento. Perder essa marca numa recarga
   INFLA o faturamento em silêncio, que é o defeito mais caro que este projeto já viu.

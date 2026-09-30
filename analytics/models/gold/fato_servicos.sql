@@ -15,7 +15,7 @@
   ## O que este modelo NÃO decide
 
   Que NFS-e cancelada não é faturamento já estava decidido em dois lugares antes daqui: a
-  curadoria de 223 notas (item 4.9) e o endpoint da API, que já filtra por padrão. Aqui a
+  curadoria manual de notas (item 4.9) e o endpoint da API, que já filtra por padrão. Aqui a
   regra só é aplicada — `cancelada` vem tratada da `stg_servicos`.
 
   ## Dimensões: as três que se aplicam
