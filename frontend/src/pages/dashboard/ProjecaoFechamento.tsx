@@ -1,6 +1,7 @@
 import { Card } from "../../design-system/ui";
 import type { DegrausDaMeta, ProjecaoDeFechamento } from "./metaTrimestral";
 import { faixaAlcancada } from "./metaTrimestral";
+import { MESES_CURTOS } from "./trimestre";
 
 export interface ProjecaoFechamentoProps {
   /** O faturamento apurado do trimestre até agora. */
@@ -30,21 +31,6 @@ function comoFator(fator: number): string {
     maximumFractionDigits: 2,
   });
 }
-
-const MESES_CURTOS = [
-  "jan",
-  "fev",
-  "mar",
-  "abr",
-  "mai",
-  "jun",
-  "jul",
-  "ago",
-  "set",
-  "out",
-  "nov",
-  "dez",
-];
 
 /** "jan–set" — os meses do ano que entram no crescimento acumulado. */
 function mesesDoAno(ultimoMes: number): string {
