@@ -48,7 +48,7 @@ export const PERMISSOES: Record<string, Regra> = {
   // Erick. A ausência de restrição aqui é intencional, não um esquecimento.
   "/estoque": { tipo: "autenticado" },
 
-  "/clientes": { tipo: "papeis", papeis: ["admin", "vendas", "financeiro"] },
+  "/clientes": { tipo: "papeis", papeis: ["admin", "financeiro"] },
   "/vendas": { tipo: "papeis", papeis: ["admin", "vendas", "financeiro"] },
   "/produtos": { tipo: "papeis", papeis: ["admin", "vendas", "financeiro"] },
   "/vendedores": { tipo: "papeis", papeis: ["admin", "vendas", "financeiro"] },
