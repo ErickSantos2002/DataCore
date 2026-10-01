@@ -110,6 +110,18 @@ pytest
 
 ---
 
+### 6. Migrations do schema `tiny`
+
+SQL manual em `migrations/`, rodado no Konsole com o superusuário do cadastro central:
+
+    bash scripts/migrar_tiny.sh 002_configuracoes_historico.sql
+
+Ordem da entrega de Configurações (out/2026): `002` → deploy do backend e do front → `003`.
+A `002` cria `tiny.configuracoes_historico` (o backend novo grava nela em todo `PUT`) e a
+chave `TRIMESTRE_APURACAO`; a `003` apaga `MESES_ANALISE`, que o front antigo ainda lê.
+
+---
+
 ## 🐳 Deploy com Docker (opcional)
 
 Você pode utilizar o `Dockerfile` para rodar a aplicação em ambiente isolado:

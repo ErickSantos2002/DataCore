@@ -39,7 +39,7 @@ processo externo de sincronia com o Tiny ERP; aqui só há `declarative_base()` 
 
 - Modelo novo = espelhar coluna que **já existe** no banco. Confira antes de escrever.
 - Mudança de DDL vira SQL manual em `migrations/` (ex.: `001_add_cancelada_column.sql`),
-  rodado à mão no Postgres. Não há Alembic para o `tiny`.
+  rodado no Konsole por `scripts/migrar_tiny.sh <arquivo>`. Não há Alembic para o `tiny`.
 - Nomes de coluna no banco são em português com acento e são mapeados explicitamente:
   `numero_nfse = Column("nº_da_nota_fiscal_eletrônica", ...)` em `models/nota_servico.py`.
   Nunca renomeie o primeiro argumento do `Column`.
