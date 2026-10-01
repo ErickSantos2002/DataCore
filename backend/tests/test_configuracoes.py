@@ -98,3 +98,54 @@ def test_003_apaga_so_meses_analise(engine, configs):
     _rodar(engine, "003_aposentar_meses_analise.sql")
     assert _valor(engine, "MESES_ANALISE") is None
     assert _valor(engine, "CFOP_VALIDOS") == SEMENTE["CFOP_VALIDOS"]
+# ------------------------------------------------------------------ validação
+from datetime import date  # noqa: E402
+
+from app.core.configuracoes import ValorInvalido, normalizar  # noqa: E402
+
+HOJE = date(2026, 10, 1)
+
+
+@pytest.mark.parametrize("entrada", [
+    "12666666.72", "12.666.666,72", "12666666,72", "R$ 12.666.666,72", " 12666666.72 ",
+])
+def test_meta_aceita_os_tres_formatos_e_grava_ponto_decimal(entrada):
+    assert normalizar("META", entrada, HOJE) == "12666666.72"
+
+
+def test_meta_inteira_ganha_duas_casas():
+    assert normalizar("META", "12000000", HOJE) == "12000000.00"
+
+
+@pytest.mark.parametrize("entrada", ["", "abc", "0", "-5", "0,00"])
+def test_meta_recusa_vazio_texto_zero_e_negativo(entrada):
+    with pytest.raises(ValorInvalido, match="META"):
+        normalizar("META", entrada, HOJE)
+
+
+@pytest.mark.parametrize("entrada,esperado", [
+    ("auto", "auto"), (" AUTO ", "auto"), ("2026-T3", "2026-T3"), ("2026-t4", "2026-T4"),
+    ("2020-T1", "2020-T1"), ("2027-T1", "2027-T1"),
+])
+def test_trimestre_aceita_auto_e_ano_trimestre(entrada, esperado):
+    assert normalizar("TRIMESTRE_APURACAO", entrada, HOJE) == esperado
+
+
+@pytest.mark.parametrize("entrada", ["", "10,11,12", "2026-T5", "2026-T0", "2019-T4", "2028-T1", "26-T3"])
+def test_trimestre_recusa_o_resto(entrada):
+    with pytest.raises(ValorInvalido, match="trimestre"):
+        normalizar("TRIMESTRE_APURACAO", entrada, HOJE)
+
+
+@pytest.mark.parametrize("entrada,esperado", [("true", "true"), ("FALSE", "false")])
+def test_animacao_so_aceita_booleano(entrada, esperado):
+    assert normalizar("ANIMACAO_META", entrada, HOJE) == esperado
+
+
+def test_animacao_recusa_outra_coisa():
+    with pytest.raises(ValorInvalido):
+        normalizar("ANIMACAO_META", "sim", HOJE)
+
+
+def test_chave_desconhecida_passa_como_veio():
+    assert normalizar("CFOP_VALIDOS", " 6102,5102 ", HOJE) == " 6102,5102 "
