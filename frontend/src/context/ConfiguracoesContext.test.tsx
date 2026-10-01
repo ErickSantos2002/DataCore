@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -13,17 +13,14 @@ import {
   useConfiguracoes,
 } from "./ConfiguracoesContext";
 
-let editar: (chave: string, valor: string) => Promise<void>;
-
-function Espiao() {
-  const ctx = useConfiguracoes();
-  editar = ctx.editarConfiguracao;
-  return (
-    <p data-testid="meta">
-      {ctx.configuracoes.find((c) => c.chave === "META")?.valor}
-    </p>
-  );
+function montar() {
+  return renderHook(() => useConfiguracoes(), {
+    wrapper: ConfiguracoesProvider,
+  });
 }
+
+const meta = (r: ReturnType<typeof montar>["result"]) =>
+  r.current.configuracoes.find((c) => c.chave === "META")?.valor;
 
 describe("ConfiguracoesContext", () => {
   beforeEach(() => {
@@ -38,32 +35,22 @@ describe("ConfiguracoesContext", () => {
       chave: "META",
       valor: "13000000.00",
     });
-    render(
-      <ConfiguracoesProvider>
-        <Espiao />
-      </ConfiguracoesProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("meta")).toHaveTextContent("1.00"),
-    );
+    const { result } = montar();
+    await waitFor(() => expect(meta(result)).toBe("1.00"));
 
-    await act(() => editar("META", "13.000.000,00"));
+    await act(() => result.current.editarConfiguracao("META", "13.000.000,00"));
 
-    expect(screen.getByTestId("meta")).toHaveTextContent("13000000.00");
+    expect(meta(result)).toBe("13000000.00");
   });
 
   it("erro do backend rejeita e não mexe no estado", async () => {
     api.updateConfiguracao.mockRejectedValue(new Error("422"));
-    render(
-      <ConfiguracoesProvider>
-        <Espiao />
-      </ConfiguracoesProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("meta")).toHaveTextContent("1.00"),
-    );
+    const { result } = montar();
+    await waitFor(() => expect(meta(result)).toBe("1.00"));
 
-    await expect(act(() => editar("META", "x"))).rejects.toThrow("422");
-    expect(screen.getByTestId("meta")).toHaveTextContent("1.00");
+    await expect(
+      act(() => result.current.editarConfiguracao("META", "x")),
+    ).rejects.toThrow("422");
+    expect(meta(result)).toBe("1.00");
   });
 });

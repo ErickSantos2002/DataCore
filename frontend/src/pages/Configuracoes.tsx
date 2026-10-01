@@ -2,31 +2,24 @@ import React, { useState } from "react";
 import { useConfiguracoes } from "../context/ConfiguracoesContext";
 import { useAuth } from "../hooks/useAuth";
 import { Alert } from "../design-system/ui/feedback";
-import { Button } from "../design-system/ui/core/Button";
 import { Card } from "../design-system/ui/core/Card";
-import { Input } from "../design-system/ui/forms/Input";
-import { Switch } from "../design-system/ui/forms/Switch";
+import { SecaoComemoracao } from "./configuracoes/SecaoComemoracao";
+import { SecaoHistorico } from "./configuracoes/SecaoHistorico";
+import { SecaoMeta } from "./configuracoes/SecaoMeta";
+import { SecaoOutrosSistemas } from "./configuracoes/SecaoOutrosSistemas";
+import { SecaoTrimestre } from "./configuracoes/SecaoTrimestre";
 
+/**
+ * Os parâmetros do painel da meta, em seções com nome e explicação — no lugar
+ * da lista crua de chave e valor. Cada seção salva a própria chave e mostra o
+ * próprio erro; a página só as empilha e avisa o histórico quando algo grava.
+ */
 const Configuracoes: React.FC = () => {
-  const { configuracoes, carregando, editarConfiguracao } = useConfiguracoes();
+  const { configuracoes, carregando } = useConfiguracoes();
   const { user, loading } = useAuth();
-  const [editandoId, setEditandoId] = useState<number | null>(null);
-  const [novoValor, setNovoValor] = useState<string>("");
-
-  const iniciarEdicao = (id: number, valorAtual: string) => {
-    setEditandoId(id);
-    setNovoValor(valorAtual);
-  };
-
-  const cancelarEdicao = () => {
-    setEditandoId(null);
-    setNovoValor("");
-  };
-
-  const salvarEdicao = async (id: number, chave: string) => {
-    await editarConfiguracao(chave, novoValor);
-    cancelarEdicao();
-  };
+  // Cada gravação bem-sucedida muda a versão, e o histórico busca de novo.
+  const [versaoHistorico, setVersaoHistorico] = useState(0);
+  const recarregarHistorico = () => setVersaoHistorico((v) => v + 1);
 
   // Se ainda está carregando auth
   if (loading) {
@@ -52,94 +45,39 @@ const Configuracoes: React.FC = () => {
     );
   }
 
+  const valorDe = (chave: string) =>
+    configuracoes.find((c) => c.chave === chave)?.valor;
+  // `key` com o valor gravado: quando a gravação muda o valor, a seção recomeça
+  // do valor novo (o backend normaliza a META); quando falha, o valor gravado
+  // não muda e o que foi digitado fica no campo.
+
   return (
-    <div className="p-6">
-      {/* Card de título e descrição */}
-      <Card padding="lg" className="mb-6">
+    <div className="flex flex-col gap-6 p-6">
+      <Card padding="lg">
         <h1 className="mb-2 text-3xl font-bold text-conteudo-heading">
           Configurações
         </h1>
-        <p className="text-conteudo-muted">
-          Gerencie os parâmetros utilizados no Dashboard.
-        </p>
+        <p className="text-conteudo-muted">Os parâmetros do painel da meta.</p>
       </Card>
-
-      {/* Lista de configurações */}
-      <Card>
-        {configuracoes.map((cfg) => (
-          <div
-            key={cfg.id}
-            className="flex w-full flex-col gap-4 border-b border-borda py-4 md:flex-row md:items-center"
-          >
-            <div className="flex-1">
-              {editandoId === cfg.id ? (
-                <Input
-                  label={cfg.chave}
-                  value={novoValor}
-                  onChange={(e) => setNovoValor(e.target.value)}
-                  spellCheck={false}
-                  className="font-mono"
-                />
-              ) : (
-                <>
-                  <p className="mb-1 text-sm font-semibold text-conteudo-muted">
-                    {cfg.chave}
-                  </p>
-                  {cfg.chave === "ANIMACAO_META" ? (
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        checked={cfg.valor === "true"}
-                        onChange={(checked) =>
-                          editarConfiguracao(
-                            cfg.chave,
-                            checked ? "true" : "false",
-                          )
-                        }
-                        label={cfg.valor === "true" ? "Ativada" : "Desativada"}
-                      />
-                    </div>
-                  ) : (
-                    <p className="mt-1 whitespace-pre-line break-words text-sm text-conteudo">
-                      {cfg.valor}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-
-            {cfg.chave !== "ANIMACAO_META" && (
-              <div className="flex gap-2 md:ml-4">
-                {editandoId === cfg.id ? (
-                  <>
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={() => salvarEdicao(cfg.id, cfg.chave)}
-                    >
-                      Salvar
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={cancelarEdicao}
-                    >
-                      Cancelar
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => iniciarEdicao(cfg.id, cfg.valor)}
-                  >
-                    Editar
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </Card>
+      <SecaoMeta
+        key={`meta:${valorDe("META")}`}
+        valor={valorDe("META")}
+        aoSalvar={recarregarHistorico}
+      />
+      <SecaoTrimestre
+        key={`trimestre:${valorDe("TRIMESTRE_APURACAO")}`}
+        valor={valorDe("TRIMESTRE_APURACAO")}
+        aoSalvar={recarregarHistorico}
+      />
+      <SecaoComemoracao
+        valor={valorDe("ANIMACAO_META")}
+        aoSalvar={recarregarHistorico}
+      />
+      <SecaoOutrosSistemas
+        configuracoes={configuracoes}
+        aoSalvar={recarregarHistorico}
+      />
+      <SecaoHistorico versao={versaoHistorico} />
     </div>
   );
 };
