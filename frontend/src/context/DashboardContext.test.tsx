@@ -20,7 +20,7 @@ const fetchFaturamentoMensal = vi.hoisted(() => vi.fn());
 vi.mock("../services/notasapi", () => ({ fetchFaturamentoMensal }));
 
 const estadoConfiguracoes = vi.hoisted(() => ({
-  atual: [{ id: 1, chave: "MESES_ANALISE", valor: "7,8,9" }],
+  atual: [{ id: 1, chave: "TRIMESTRE_APURACAO", valor: "2026-T3" }],
 }));
 vi.mock("./ConfiguracoesContext", () => ({
   useConfiguracoes: () => ({
@@ -45,13 +45,15 @@ function dozeMeses(valores: Partial<Record<number, number>> = {}) {
 }
 
 function Espiao() {
-  const { totalAno, serieMensal, dados, total, carregando } = useDashboard();
+  const { totalAno, serieMensal, dados, total, carregando, trimestre } =
+    useDashboard();
   if (carregando) return <p>carregando</p>;
   return (
     <div>
       <p data-testid="totalAno">{totalAno}</p>
       <p data-testid="totalTrimestre">{total}</p>
       <p data-testid="mesesNaSerie">{serieMensal.length}</p>
+      <p data-testid="trimestre">{`${trimestre.ano}-T${trimestre.trimestre}`}</p>
       <p data-testid="mesesEmApuracao">{dados.map((d) => d.total).join(",")}</p>
     </div>
   );
@@ -64,6 +66,48 @@ describe("DashboardContext lendo /faturamento/mensal", () => {
     // testes rodam. Se a data falsa não valesse, o teste do gráfico passaria
     // por coincidência de calendário e quebraria sozinho no mês seguinte.
     vi.setSystemTime(new Date(2026, 2, 15));
+    estadoConfiguracoes.atual = [
+      { id: 1, chave: "TRIMESTRE_APURACAO", valor: "2026-T3" },
+    ];
+  });
+
+  it("trimestre fixado em outro ano busca o ano dele e o anterior a ele", async () => {
+    vi.setSystemTime(new Date(2027, 0, 2));
+    estadoConfiguracoes.atual = [
+      { id: 1, chave: "TRIMESTRE_APURACAO", valor: "2026-T4" },
+    ];
+    fetchFaturamentoMensal.mockImplementation(async (ano: number) =>
+      dozeMeses(ano === 2026 ? { 10: 1, 11: 2, 12: 3 } : {}),
+    );
+
+    render(
+      <DashboardProvider>
+        <Espiao />
+      </DashboardProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("totalTrimestre")).toHaveTextContent("6"),
+    );
+    expect(screen.getByTestId("trimestre")).toHaveTextContent("2026-T4");
+    const anosBuscados = fetchFaturamentoMensal.mock.calls.map((c) => c[0]);
+    expect(new Set(anosBuscados)).toEqual(new Set([2027, 2026, 2025]));
+  });
+
+  it("sem a chave, segue o trimestre do calendário", async () => {
+    vi.setSystemTime(new Date(2026, 9, 1));
+    estadoConfiguracoes.atual = [];
+    fetchFaturamentoMensal.mockResolvedValue(dozeMeses());
+
+    render(
+      <DashboardProvider>
+        <Espiao />
+      </DashboardProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("trimestre")).toHaveTextContent("2026-T4"),
+    );
   });
 
   it("soma o ano a partir das doze linhas da API", async () => {
@@ -114,7 +158,7 @@ describe("DashboardContext lendo /faturamento/mensal", () => {
     );
   });
 
-  it("usa MESES_ANALISE para o trimestre em apuração", async () => {
+  it("usa TRIMESTRE_APURACAO para o trimestre em apuração", async () => {
     fetchFaturamentoMensal.mockResolvedValue(
       dozeMeses({ 7: 10, 8: 20, 9: 30 }),
     );

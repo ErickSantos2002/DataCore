@@ -2,6 +2,10 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { fetchFaturamentoMensal } from "../services/notasapi";
 import { useConfiguracoes } from "./ConfiguracoesContext";
 import { rotuloDoMes } from "./mes";
+import {
+  trimestreEmApuracao,
+  type TrimestreEmApuracao,
+} from "../pages/dashboard/trimestre";
 
 interface FaturamentoMensal {
   mes: string;
@@ -9,7 +13,7 @@ interface FaturamentoMensal {
 }
 
 interface DashboardContextType {
-  /** Os meses do trimestre em apuração (MESES_ANALISE). */
+  /** Os meses do trimestre em apuração (TRIMESTRE_APURACAO). */
   dados: FaturamentoMensal[];
   /** A soma do trimestre — o número que os velocímetros medem. */
   total: number;
@@ -18,15 +22,16 @@ interface DashboardContextType {
   /** Janeiro até o mês corrente, para o gráfico de barras. Sai da MESMA
    *  requisição do `totalAno`: é a quebra por mês que antes era jogada fora. */
   serieMensal: FaturamentoMensal[];
-  /** O faturamento de cada mês do ANO ANTERIOR, índice 0 = janeiro. É a forma
+  /** O faturamento de cada mês do ano anterior ao DO TRIMESTRE, índice 0 = janeiro. É a forma
    *  sazonal sobre a qual a projeção de fechamento estima o que falta do
    *  trimestre. Vazio quando não há dado do ano anterior — e aí a projeção
    *  cai no método linear e a tela diz que caiu. */
   totaisAnoAnterior: number[];
-  /** O faturamento de cada mês do ANO CORRENTE, índice 0 = janeiro — os doze,
-   *  sem o corte no mês corrente do `serieMensal`. Dele a projeção tira o
-   *  crescimento acumulado dos meses antes do trimestre. */
-  totaisAnoCorrente: number[];
+  /** Faturamento de cada mês do ANO DO TRIMESTRE, índice 0 = janeiro. Dele a
+   *  projeção tira o crescimento acumulado dos meses antes do trimestre. */
+  totaisAnoDoTrimestre: number[];
+  /** Qual trimestre está em apuração — do calendário ou fixado. */
+  trimestre: TrimestreEmApuracao;
   carregando: boolean;
 }
 
@@ -36,7 +41,8 @@ const DashboardContext = createContext<DashboardContextType>({
   totalAno: 0,
   serieMensal: [],
   totaisAnoAnterior: [],
-  totaisAnoCorrente: [],
+  totaisAnoDoTrimestre: [],
+  trimestre: trimestreEmApuracao(undefined, new Date()),
   carregando: true,
 });
 
@@ -50,7 +56,12 @@ export const DashboardProvider = ({
   const [totalAno, setTotalAno] = useState(0);
   const [serieMensal, setSerieMensal] = useState<FaturamentoMensal[]>([]);
   const [totaisAnoAnterior, setTotaisAnoAnterior] = useState<number[]>([]);
-  const [totaisAnoCorrente, setTotaisAnoCorrente] = useState<number[]>([]);
+  const [totaisAnoDoTrimestre, setTotaisAnoDoTrimestre] = useState<number[]>(
+    [],
+  );
+  const [trimestre, setTrimestre] = useState(() =>
+    trimestreEmApuracao(undefined, new Date()),
+  );
   const [carregando, setCarregando] = useState(true);
 
   const { configuracoes, carregando: carregandoConfig } = useConfiguracoes();
@@ -59,24 +70,12 @@ export const DashboardProvider = ({
     const carregar = async () => {
       if (carregandoConfig) return;
 
-      function getArray(chave: string): string[] {
-        const config = configuracoes.find((c) => c.chave === chave);
-        return config?.valor?.split(",").map((v) => v.trim()) || [];
-      }
-
-      // CFOP_VALIDOS e MARCADORES_INVALIDOS nao sao mais lidos aqui: o que conta
-      // como faturamento e decidido na camada `gold` e chega pronto pela API.
-      // A configuracao continua existindo para quem ainda filtra no navegador —
-      // ver as outras telas — mas esta parou de ter uma copia da regua.
-
-      // MESES_ANALISE é 1-based (1 = janeiro), do jeito que se digita em
-      // Configurações. O Date do JS conta mês a partir de 0 — daí o -1 abaixo.
-      const meses = getArray("MESES_ANALISE")
-        .map(Number)
-        .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
-
       const hoje = new Date();
       const anoAtual = hoje.getFullYear();
+      const doTrimestre = trimestreEmApuracao(
+        configuracoes.find((c) => c.chave === "TRIMESTRE_APURACAO")?.valor,
+        hoje,
+      );
 
       // O ano corrente inteiro, em UMA requisição de doze linhas. Dela saem as
       // TRÊS leituras que a tela faz: o total do ano, a quebra mês a mês do
@@ -89,13 +88,12 @@ export const DashboardProvider = ({
       // flutuante). Continua valendo, e agora por um motivo mais forte: quem
       // separa os meses é o banco, não esta tela.
       let totalAnoCompleto = 0;
-      let totaisDoAnoCorrente: number[] = [];
+      let totaisDoAnoDoTrimestre: number[] = [];
       let serieDoAno: FaturamentoMensal[] = [];
       let mesesEmApuracao: FaturamentoMensal[] = [];
 
       try {
         const totais = await totaisDoAno(anoAtual);
-        totaisDoAnoCorrente = totais;
         totalAnoCompleto = totais.reduce((acc, valor) => acc + valor, 0);
         // Mês futuro ficaria como barra vazia no fim do gráfico, sugerindo
         // queda onde só há calendário. O gráfico para no mês corrente.
@@ -105,9 +103,15 @@ export const DashboardProvider = ({
             mes: rotuloDoMes(indice + 1, anoAtual),
             total: valor,
           }));
-        mesesEmApuracao = meses.map((mes) => ({
-          mes: rotuloDoMes(mes, anoAtual),
-          total: totais[mes - 1],
+        // Trimestre fixado em outro ano (o T4 olhado em janeiro) precisa do
+        // ano dele; no caso comum é o mesmo ano e a mesma requisição.
+        totaisDoAnoDoTrimestre =
+          doTrimestre.ano === anoAtual
+            ? totais
+            : await totaisDoAno(doTrimestre.ano);
+        mesesEmApuracao = doTrimestre.meses.map((mes) => ({
+          mes: rotuloDoMes(mes, doTrimestre.ano),
+          total: totaisDoAnoDoTrimestre[mes - 1] ?? 0,
         }));
       } catch (err) {
         console.error("Erro ao buscar total do ano", err);
@@ -130,7 +134,7 @@ export const DashboardProvider = ({
       let totaisDoAnoAnterior: number[] = [];
 
       try {
-        totaisDoAnoAnterior = await totaisDoAno(anoAtual - 1);
+        totaisDoAnoAnterior = await totaisDoAno(doTrimestre.ano - 1);
       } catch (err) {
         console.error("Erro ao buscar o faturamento do ano anterior", err);
       }
@@ -140,7 +144,8 @@ export const DashboardProvider = ({
       setTotalAno(totalAnoCompleto);
       setSerieMensal(serieDoAno);
       setTotaisAnoAnterior(totaisDoAnoAnterior);
-      setTotaisAnoCorrente(totaisDoAnoCorrente);
+      setTotaisAnoDoTrimestre(totaisDoAnoDoTrimestre);
+      setTrimestre(doTrimestre);
       setCarregando(false);
     };
 
@@ -155,7 +160,8 @@ export const DashboardProvider = ({
         totalAno,
         serieMensal,
         totaisAnoAnterior,
-        totaisAnoCorrente,
+        totaisAnoDoTrimestre,
+        trimestre,
         carregando,
       }}
     >

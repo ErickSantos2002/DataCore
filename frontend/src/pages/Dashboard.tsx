@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useDashboard } from "../context/DashboardContext";
 import { useConfiguracoes } from "../context/ConfiguracoesContext";
 import { Spinner } from "../design-system/ui";
+import { Alert } from "../design-system/ui/feedback";
 import { CabecalhoMeta } from "./dashboard/CabecalhoMeta";
 import { FaturamentoPorMes } from "./dashboard/FaturamentoPorMes";
 import { ProjecaoFechamento } from "./dashboard/ProjecaoFechamento";
@@ -10,9 +11,9 @@ import { ResumoTrimestre } from "./dashboard/ResumoTrimestre";
 import { Velocimetro } from "./dashboard/Velocimetro";
 import {
   degrausDaMeta,
-  mesesDoTrimestre,
   projecaoDeFechamento,
 } from "./dashboard/metaTrimestral";
+import { nomeDoTrimestre } from "./dashboard/trimestre";
 import { useComemoracaoMeta } from "./dashboard/useComemoracaoMeta";
 
 /** Percentual de um degrau, travado em 100% — passar da meta não estica o arco. */
@@ -29,7 +30,8 @@ const Dashboard: React.FC = () => {
     totalAno,
     serieMensal,
     totaisAnoAnterior,
-    totaisAnoCorrente,
+    totaisAnoDoTrimestre,
+    trimestre,
   } = useDashboard();
   const { configuracoes } = useConfiguracoes();
 
@@ -39,19 +41,19 @@ const Dashboard: React.FC = () => {
 
   const animacaoConfig = configuracoes.find((c) => c.chave === "ANIMACAO_META");
 
-  // Os mesmos meses que o DashboardContext usou para somar o `total`: é o
+  // O trimestre vem do contexto — o mesmo que somou o `total`: é o
   // calendário sobre o qual a projeção mede o ritmo.
-  const mesesConfig = configuracoes.find((c) => c.chave === "MESES_ANALISE");
   const projecao = projecaoDeFechamento({
     realizado: total,
-    meses: mesesDoTrimestre(mesesConfig?.valor),
+    meses: trimestre.meses,
+    ano: trimestre.ano,
     hoje: new Date(),
     // A forma do mesmo trimestre no ano anterior. Sem ela a projeção cai no
     // método linear — e o card diz isso, em vez de calar.
     totaisAnoAnterior: totaisAnoAnterior ?? [],
     // O crescimento acumulado do ano antes do trimestre: segura a projeção
     // nos primeiros dias, quando o fator do próprio trimestre ainda é ruído.
-    totaisAnoCorrente: totaisAnoCorrente ?? [],
+    totaisAnoCorrente: totaisAnoDoTrimestre ?? [],
   });
 
   useComemoracaoMeta({
@@ -76,6 +78,12 @@ const Dashboard: React.FC = () => {
     <div className="min-h-screen bg-surface-base p-6 transition-colors md:h-full md:min-h-0">
       <div className="flex flex-col gap-4">
         <CabecalhoMeta usuario={user} />
+
+        {trimestre.fixado && (
+          <Alert variant="warning">
+            {`Trimestre fixado em Configurações: ${nomeDoTrimestre(trimestre)}. O painel não está seguindo o calendário.`}
+          </Alert>
+        )}
 
         <ProjecaoFechamento
           realizado={total}

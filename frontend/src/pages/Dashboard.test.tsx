@@ -31,7 +31,13 @@ const estadoDashboard = vi.hoisted(() => ({
     totalAno: 0,
     serieMensal: [] as { mes: string; total: number }[],
     totaisAnoAnterior: [] as number[],
-    totaisAnoCorrente: [] as number[],
+    totaisAnoDoTrimestre: [] as number[],
+    trimestre: {
+      ano: 2026,
+      trimestre: 3 as 1 | 2 | 3 | 4,
+      meses: [] as number[],
+      fixado: false,
+    },
     carregando: false,
   },
 }));
@@ -84,8 +90,11 @@ interface Cenario {
   meta?: string;
   /** Valor cru da chave ANIMACAO_META. */
   animacao?: string;
-  /** Valor cru da chave MESES_ANALISE — os meses do trimestre em apuração. */
+  /** Meses do trimestre, ex. "6,7,8" — viram `trimestre.meses` no contexto
+   *  mockado. O trimestre de verdade é decidido pelo DashboardContext. */
   meses?: string;
+  /** O trimestre está fixado em Configurações (não segue o calendário). */
+  fixado?: boolean;
   total?: number;
   totalAno?: number;
   dados?: { mes: string; total: number }[];
@@ -93,8 +102,8 @@ interface Cenario {
   serieMensal?: { mes: string; total: number }[];
   /** Faturamento de cada mes do ano anterior, indice 0 = janeiro. */
   totaisAnoAnterior?: number[];
-  /** Faturamento de cada mes do ano corrente, indice 0 = janeiro. */
-  totaisAnoCorrente?: number[];
+  /** Faturamento de cada mes do ano do trimestre, indice 0 = janeiro. */
+  totaisAnoDoTrimestre?: number[];
   carregando?: boolean;
 }
 
@@ -107,7 +116,8 @@ function montar({
   dados = [],
   serieMensal = [],
   totaisAnoAnterior = [],
-  totaisAnoCorrente = [],
+  totaisAnoDoTrimestre = [],
+  fixado = false,
   carregando = false,
 }: Cenario) {
   const configuracoes: { id: number; chave: string; valor: string }[] = [];
@@ -115,8 +125,6 @@ function montar({
     configuracoes.push({ id: 1, chave: "META", valor: meta });
   if (animacao !== undefined)
     configuracoes.push({ id: 2, chave: "ANIMACAO_META", valor: animacao });
-  if (meses !== undefined)
-    configuracoes.push({ id: 3, chave: "MESES_ANALISE", valor: meses });
 
   estadoConfiguracoes.atual = configuracoes;
   estadoDashboard.atual = {
@@ -125,7 +133,13 @@ function montar({
     totalAno,
     serieMensal,
     totaisAnoAnterior,
-    totaisAnoCorrente,
+    totaisAnoDoTrimestre,
+    trimestre: {
+      ano: new Date().getFullYear(),
+      trimestre: 3,
+      meses: meses ? meses.split(",").map((m) => Number(m.trim())) : [],
+      fixado,
+    },
     carregando,
   };
 
@@ -514,7 +528,7 @@ describe("Meta do trimestre — projeção de fechamento", () => {
         300_000,
         310_000,
       ],
-      totaisAnoCorrente: [...Array<number>(9).fill(110_000), 0, 0, 0],
+      totaisAnoDoTrimestre: [...Array<number>(9).fill(110_000), 0, 0, 0],
     });
 
     // Peso do trimestre: 10.000 / 920.000. Fator: (1 - peso) x 1,1.
@@ -525,6 +539,24 @@ describe("Meta do trimestre — projeção de fechamento", () => {
         /corrigida pelo fator de crescimento 1,09×: 99% do crescimento acumulado de jan–set \(1,10×\) e 1% do medido em 1 dias apurados dos 92 dias do trimestre \(0,00×\)/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("avisa quando o trimestre está fixado em Configurações", () => {
+    pararORelogioEm(2026, 10, 1);
+    montar({ meta: "12000000", meses: "7,8,9", fixado: true });
+
+    expect(
+      screen.getByText(
+        "Trimestre fixado em Configurações: 3º trimestre de 2026. O painel não está seguindo o calendário.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("não avisa nada com o trimestre automático", () => {
+    pararORelogioEm(2026, 10, 1);
+    montar({ meta: "12000000", meses: "10,11,12" });
+
+    expect(screen.queryByText(/Trimestre fixado/)).not.toBeInTheDocument();
   });
 
   it("sem o ano anterior, avisa na tela que a projecao caiu no linear", () => {

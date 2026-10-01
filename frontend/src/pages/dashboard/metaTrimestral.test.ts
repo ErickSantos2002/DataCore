@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   degrausDaMeta,
   faixaAlcancada,
-  mesesDoTrimestre,
   projecaoDeFechamento,
 } from "./metaTrimestral";
 
@@ -29,21 +28,6 @@ import {
 /** Junho (30) + julho (31) + agosto (31) — o trimestre em uso hoje. */
 const TRIMESTRE = [6, 7, 8];
 const DIAS_DO_TRIMESTRE = 92;
-
-describe("meses do trimestre", () => {
-  it("lê a lista da chave MESES_ANALISE, com ou sem espaço", () => {
-    expect(mesesDoTrimestre("6,7,8")).toEqual([6, 7, 8]);
-    expect(mesesDoTrimestre(" 6 , 7 , 8 ")).toEqual([6, 7, 8]);
-  });
-
-  it("descarta o que não é mês do calendário", () => {
-    // 0, 13 e "abril" nao sao mes 1..12 — entrariam no calendario da
-    // projecao como dia nenhum, ou como um mes que nao existe.
-    expect(mesesDoTrimestre("0,6,13,abril,7")).toEqual([6, 7]);
-    expect(mesesDoTrimestre("")).toEqual([]);
-    expect(mesesDoTrimestre(undefined)).toEqual([]);
-  });
-});
 
 describe("faixa de PL alcançada", () => {
   const degraus = degrausDaMeta("12000000"); // 2,7 mi / 3,6 mi / 4,2 mi
@@ -164,7 +148,7 @@ describe("projeção de fechamento — o método linear, sem o ano anterior", ()
   });
 
   it("conta fevereiro pelo ano: 29 dias em ano bissexto, 28 no comum", () => {
-    // O trimestre nao e sempre jun/jul/ago — MESES_ANALISE e configuravel.
+    // O trimestre nao e sempre jun/jul/ago — TRIMESTRE_APURACAO e configuravel.
     const bissexto = projecaoDeFechamento({
       realizado: 1_000_000,
       meses: [1, 2, 3],

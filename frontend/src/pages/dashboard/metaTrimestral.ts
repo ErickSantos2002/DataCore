@@ -67,21 +67,6 @@ export function faixaAlcancada(
   return null;
 }
 
-/** Os meses do trimestre em apuração, como vêm da chave MESES_ANALISE.
- *
- * Mesmo parse do DashboardContext, de propósito: é ele quem decide quais
- * meses entram no `total`, e a projeção precisa medir o MESMO período. Um
- * parse divergente aqui projetaria o faturamento de três meses sobre um
- * calendário de quatro. Também não deduplica pelo mesmo motivo — se a
- * configuração repetir um mês, o contexto soma o mês duas vezes, e os dias
- * têm que ser contados duas vezes para a razão continuar honesta.
- */
-export function mesesDoTrimestre(raw?: string): number[] {
-  return (raw?.split(",") ?? [])
-    .map((m) => Number(m.trim()))
-    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
-}
-
 /** Como a projeção chegou ao número.
  *
  *  `sazonal` — pela forma do mesmo trimestre no ano anterior, corrigida pelo
@@ -126,7 +111,7 @@ export interface ProjecaoDeFechamento {
 export interface EntradaDaProjecao {
   /** O faturamento apurado do trimestre até agora. */
   realizado: number;
-  /** Os meses do trimestre, 1-based, como em MESES_ANALISE. */
+  /** Os meses do trimestre, 1-based — os de `trimestreEmApuracao`. */
   meses: number[];
   /** O ano do trimestre. Padrão: o de `hoje`. Um trimestre fixado em
    *  Configurações pode ser de outro ano — o T4 olhado em janeiro. */
