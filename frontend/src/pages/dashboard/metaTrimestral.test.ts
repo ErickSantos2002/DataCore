@@ -571,3 +571,43 @@ describe("projeção de fechamento — o fator combinado com o crescimento do an
     expect(projecao.fatorDoAno).toBe(3);
   });
 });
+
+describe("projeção de fechamento — trimestre de outro ano", () => {
+  it("trimestre do ano passado conta como encerrado: projeção é o realizado", () => {
+    // 2026-T4 fixado, olhado em 02/01/2027.
+    const projecao = projecaoDeFechamento({
+      realizado: 3_100_000,
+      meses: [10, 11, 12],
+      ano: 2026,
+      hoje: new Date(2027, 0, 2),
+      totaisAnoAnterior: Array<number>(12).fill(300_000),
+    });
+
+    expect(projecao.diasDecorridos).toBe(92);
+    expect(projecao.diasTotais).toBe(92);
+    expect(projecao.projetado).toBeCloseTo(3_100_000, 2);
+    expect(projecao.anoAnterior).toBe(2025);
+  });
+
+  it("trimestre de ano que ainda não chegou não tem projeção", () => {
+    const projecao = projecaoDeFechamento({
+      realizado: 0,
+      meses: [1, 2, 3],
+      ano: 2027,
+      hoje: new Date(2026, 11, 20),
+    });
+
+    expect(projecao.disponivel).toBe(false);
+  });
+
+  it("conta fevereiro pelo ano do trimestre, não pelo de hoje", () => {
+    const projecao = projecaoDeFechamento({
+      realizado: 1,
+      meses: [1, 2, 3],
+      ano: 2028,
+      hoje: new Date(2029, 5, 1),
+    });
+
+    expect(projecao.diasTotais).toBe(91); // 2028 é bissexto
+  });
+});

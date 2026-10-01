@@ -128,6 +128,9 @@ export interface EntradaDaProjecao {
   realizado: number;
   /** Os meses do trimestre, 1-based, como em MESES_ANALISE. */
   meses: number[];
+  /** O ano do trimestre. Padrão: o de `hoje`. Um trimestre fixado em
+   *  Configurações pode ser de outro ano — o T4 olhado em janeiro. */
+  ano?: number;
   /** Hoje. Parâmetro, e não `new Date()` aqui dentro, para o teste poder
    *  parar o relógio em qualquer dia do trimestre. */
   hoje: Date;
@@ -209,12 +212,20 @@ function fatorLimitado(atual: number, base: number): number | null {
 export function projecaoDeFechamento({
   realizado,
   meses,
+  ano: anoDoTrimestre,
   hoje,
   totaisAnoAnterior = [],
   totaisAnoCorrente = [],
 }: EntradaDaProjecao): ProjecaoDeFechamento {
-  const ano = hoje.getFullYear();
-  const mesDeHoje = hoje.getMonth() + 1;
+  const ano = anoDoTrimestre ?? hoje.getFullYear();
+  // Trimestre de ano já passado conta como inteiro decorrido (13 = depois de
+  // dezembro); de ano que não chegou, como não começado (0 = antes de janeiro).
+  const mesDeHoje =
+    ano < hoje.getFullYear()
+      ? 13
+      : ano > hoje.getFullYear()
+        ? 0
+        : hoje.getMonth() + 1;
   const anoAnterior = ano - 1;
 
   let diasTotais = 0;
