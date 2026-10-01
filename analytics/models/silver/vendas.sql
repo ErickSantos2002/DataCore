@@ -17,6 +17,7 @@
        classificadas por lá; 15 notas divergem entre os dois caminhos (cerca de 1%).
     2. Situação "emitida danfe" — lida de `descricao_situacao`, nunca de `situacao`.
     3. Sem marcador que exclua, conforme a classificação de `stg_marcadores`.
+    4. Sem devolução INTEGRAL que cite a nota (ver o CTE `notas_devolvidas_integralmente`).
 
   ⚠️ O RATEIO é o que faz o faturamento somar. `valor_nota` pertence à NOTA e o grão
   aqui é ITEM: repetir o valor cheio em cada linha conta a mesma nota várias vezes.
@@ -73,6 +74,47 @@ notas_curadas_fora as (
 
     select id_nota
     from {{ ref('notas_fora_do_faturamento') }}
+
+),
+
+-- Vendas desfeitas por devolução INTEGRAL — decisão do Erick em 2026-10-01.
+--
+-- A D8 diz que devolução não abate faturamento: a venda devolvida sai pelo MARCADOR. Só
+-- que nem toda venda devolvida ganhou marcador. Medido em 2026-10-01: 10 vendas
+-- (2019–2024, R$ 40.862,40) têm nota de devolução 1202/2202 emitida, citando a venda pelo
+-- número e com o MESMO valor — a venda foi desfeita por inteiro e seguia contando. Uma é a
+-- 005525, que a decisão de 2026-09-05 deixou contando por só ter "cancelamento
+-- solicitado": a devolução 005578 é a prova que faltava.
+--
+-- A devolução cita a origem em texto livre ("faturado na DANFE de venda 005525", "NF de
+-- venda 4322") — o mesmo padrão que o relatório de compradores do HS.OS usa.
+--
+-- ⚠️ Só a devolução INTEGRAL (mesmo valor da nota) tira a venda. A parcial continua
+-- contando, coerente com a D8: tirar a nota inteira por um item devolvido erraria mais
+-- do que deixar (caso da 006586, ver `marcadores_excecoes`).
+devolucoes as (
+
+    select
+        n.valor_nota,
+        lpad(
+            substring(n.observacoes from '(?i)(?:danfe|nf)[^0-9]{0,25}([0-9]{3,6})'),
+            6, '0'
+        ) as numero_origem
+    from notas n
+    where n.situacao = 'emitida danfe'
+      and exists (
+          select 1 from itens i
+          where i.id_nota = n.id and i.cfop::text in ('1202', '2202')
+      )
+
+),
+
+notas_devolvidas_integralmente as (
+
+    select o.id as id_nota
+    from devolucoes d
+    join notas o on o.numero::text = d.numero_origem
+    where abs(o.valor_nota - d.valor_nota) < 0.01
 
 ),
 
@@ -161,6 +203,9 @@ venda as (
 
         -- 4. não retirada à mão pela curadoria (ver o CTE, com o porquê)
         and n.id not in (select id_nota from notas_curadas_fora)
+
+        -- 5. não desfeita por devolução integral (ver o CTE, com o porquê)
+        and n.id not in (select id_nota from notas_devolvidas_integralmente)
 
 )
 
