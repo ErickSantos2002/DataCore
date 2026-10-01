@@ -149,3 +149,85 @@ def test_animacao_recusa_outra_coisa():
 
 def test_chave_desconhecida_passa_como_veio():
     assert normalizar("CFOP_VALIDOS", " 6102,5102 ", HOJE) == " 6102,5102 "
+# ------------------------------------------------------------------ rotas
+
+def _historico(engine):
+    with engine.connect() as conn:
+        return conn.execute(text(
+            "SELECT chave, valor_anterior, valor_novo, alterado_por"
+            "  FROM tiny.configuracoes_historico ORDER BY id"
+        )).all()
+
+
+def test_comum_nao_altera(client, configs, comum):
+    r = client.put("/configuracoes/META", json={"valor": "1"}, headers=comum.headers)
+    assert r.status_code == 403
+    assert _valor(configs, "META") == SEMENTE["META"]
+
+
+def test_sem_token_nao_altera(client, configs):
+    assert client.put("/configuracoes/META", json={"valor": "1"}).status_code == 401
+
+
+def test_comum_nao_cria(client, configs, comum):
+    r = client.post("/configuracoes/", json={"chave": "X", "valor": "1"}, headers=comum.headers)
+    assert r.status_code == 403
+
+
+def test_comum_continua_lendo(client, configs, comum):
+    r = client.get("/configuracoes/", headers=comum.headers)
+    assert r.status_code == 200
+    assert {c["chave"] for c in r.json()} >= {"META", "TRIMESTRE_APURACAO"}
+
+
+def test_admin_altera_normaliza_e_registra(client, configs, admin):
+    r = client.put("/configuracoes/META", json={"valor": "13.000.000,00"}, headers=admin.headers)
+    assert r.status_code == 200
+    assert r.json()["valor"] == "13000000.00"
+    assert _valor(configs, "META") == "13000000.00"
+    assert _historico(configs) == [("META", "12666666.72", "13000000.00", "chefe")]
+
+
+def test_valor_invalido_e_422_e_nao_registra(client, configs, admin):
+    r = client.put("/configuracoes/TRIMESTRE_APURACAO", json={"valor": "10,11,12"},
+                   headers=admin.headers)
+    assert r.status_code == 422
+    assert "trimestre" in r.json()["detail"]
+    assert _valor(configs, "TRIMESTRE_APURACAO") == "auto"
+    assert _historico(configs) == []
+
+
+def test_mesmo_valor_nao_gera_historico(client, configs, admin):
+    for _ in range(2):
+        r = client.put("/configuracoes/ANIMACAO_META", json={"valor": "true"},
+                       headers=admin.headers)
+        assert r.status_code == 200
+    assert _historico(configs) == []
+
+
+def test_meta_igual_em_outro_formato_nao_gera_historico(client, configs, admin):
+    r = client.put("/configuracoes/META", json={"valor": "R$ 12.666.666,72"},
+                   headers=admin.headers)
+    assert r.status_code == 200
+    assert _historico(configs) == []
+
+
+def test_criar_registra_valor_anterior_nulo(client, configs, admin):
+    r = client.post("/configuracoes/", json={"chave": "NOVA", "valor": "x"}, headers=admin.headers)
+    assert r.status_code == 200
+    assert _historico(configs) == [("NOVA", None, "x", "chefe")]
+
+
+def test_historico_so_admin_mais_recente_primeiro_e_limitado(client, configs, admin, comum):
+    for valor in ("2026-T1", "2026-T2", "2026-T3"):
+        client.put("/configuracoes/TRIMESTRE_APURACAO", json={"valor": valor},
+                   headers=admin.headers)
+
+    assert client.get("/configuracoes/historico", headers=comum.headers).status_code == 403
+
+    r = client.get("/configuracoes/historico?limite=2", headers=admin.headers)
+    assert r.status_code == 200
+    assert [h["valor_novo"] for h in r.json()] == ["2026-T3", "2026-T2"]
+    assert r.json()[0]["alterado_por"] == "chefe"
+    assert client.get("/configuracoes/historico?limite=0",
+                      headers=admin.headers).status_code == 422

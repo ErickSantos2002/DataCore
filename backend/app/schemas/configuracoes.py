@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel
 
 # Base para reuso
@@ -20,3 +23,14 @@ class Configuracao(ConfiguracaoBase):
     model_config = {
         "from_attributes": True
     }
+
+
+class HistoricoConfiguracao(BaseModel):
+    id: int
+    chave: str
+    valor_anterior: Optional[str]
+    valor_novo: str
+    alterado_por: str
+    alterado_em: datetime
+
+    model_config = {"from_attributes": True}
