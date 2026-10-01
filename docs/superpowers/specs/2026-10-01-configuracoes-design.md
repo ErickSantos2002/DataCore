@@ -53,7 +53,7 @@ CREATE TABLE tiny.configuracoes_historico (
     chave          text        NOT NULL,
     valor_anterior text,                    -- NULL quando a chave foi criada
     valor_novo     text        NOT NULL,
-    alterado_por   text        NOT NULL,    -- e-mail do usuário do token
+    alterado_por   text        NOT NULL,    -- username de quem alterou (o e-mail é opcional em auth.usuarios)
     alterado_em    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON tiny.configuracoes_historico (alterado_em DESC);
@@ -68,10 +68,18 @@ histórico.
 `limite` entre 1 e 100. A rota é declarada **antes** de `GET /{chave}`, senão o
 FastAPI a captura como a chave `historico`.
 
-**DDL.** `backend/migrations/002_configuracoes_historico.sql`, rodado à mão no
-Konsole com o superusuário (o `tiny` não tem Alembic). O mesmo arquivo cria a
-chave `TRIMESTRE_APURACAO` (parte 2). Os usuários de leitura e da aplicação
-precisam de `SELECT`/`INSERT` na tabela e `USAGE` na sequência — o script concede.
+**DDL.** Duas migrations SQL, rodadas à mão no Konsole com o superusuário (o
+`tiny` não tem Alembic), pelo `scripts/migrar_tiny.sh`:
+
+- `002_configuracoes_historico.sql` — cria a tabela e a chave
+  `TRIMESTRE_APURACAO = 'auto'`. Roda **antes** do deploy: o backend novo grava
+  histórico em todo `PUT`, e o front antigo ignora a chave nova.
+- `003_aposentar_meses_analise.sql` — apaga `MESES_ANALISE`. Roda **depois** do
+  deploy do front: o front antigo sem ela ficaria sem trimestre.
+
+As permissões da tabela nova copiam as da `tiny.configuracoes`: quem pode
+`UPDATE` lá ganha `SELECT`/`INSERT` aqui (e `USAGE` na sequência); quem só lê lá,
+só lê aqui. Assim o script não precisa saber o nome dos usuários.
 
 **Testes** (pytest, `backend/tests/`): não-admin recebe 403 no `PUT`/`POST`; cada
 regra da tabela de validação; META normalizada nos três formatos; histórico
@@ -115,13 +123,16 @@ Quem passa a usar:
 - Com `fixado`, o cabeçalho da meta mostra um aviso: "Trimestre fixado em
   Configurações: 3º de 2026. O painel não está seguindo o calendário."
 
-A migração cria `TRIMESTRE_APURACAO = 'auto'` e apaga `MESES_ANALISE`. Nenhum outro
-sistema lê `MESES_ANALISE` (varrido em `~/github` em 01/10/2026).
+A `002` cria `TRIMESTRE_APURACAO = 'auto'`; a `003` apaga `MESES_ANALISE`. Nenhum
+outro sistema lê `MESES_ANALISE` (varrido em `~/github` em 01/10/2026).
 
-**Ordem de deploy:** o front novo trata a ausência de `TRIMESTRE_APURACAO` como
-`auto`, então ele pode subir antes ou depois da migração. O front **antigo** sem
-`MESES_ANALISE` ficaria sem meses — por isso a migração roda **depois** do deploy
-do front.
+**Ordem de deploy:** `002` → deploy do backend e do front → `003`. O front novo
+trata a ausência de `TRIMESTRE_APURACAO` como `auto`; o **antigo** sem
+`MESES_ANALISE` ficaria sem meses.
+
+**Projeção com trimestre fixado de outro ano.** `projecaoDeFechamento` ganha `ano`
+na entrada. Trimestre de ano anterior ao de `hoje` conta como inteiro decorrido
+(projeção = realizado); de ano posterior, como não começado (`disponivel: false`).
 
 **Testes** (vitest): `auto` em cada trimestre e nas viradas (31/03 → 01/04,
 31/12 → 01/01); valor fixado com e sem ano corrente; inválido cai em `auto`;
@@ -179,8 +190,8 @@ Depois disso no ar: `DELETE FROM tiny.configuracoes WHERE chave IN ('CFOP_VALIDO
 
 ## Riscos
 
-- **Migração antes do front** deixa o painel antigo sem trimestre — a ordem está na
-  parte 2.
+- **`003` antes do front** deixa o painel antigo sem trimestre; **backend antes da
+  `002`** faz todo `PUT` falhar (tabela de histórico ausente). A ordem está na parte 2.
 - **Permissão do histórico**: sem o `GRANT`, o `PUT` falha inteiro (mesma
   transação). O script concede e o teste de fumaça pós-migração é um `PUT` real
   da `ANIMACAO_META` pela página.

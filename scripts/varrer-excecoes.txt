@@ -17,6 +17,11 @@ frontend/docs/superpowers/specs/2026-08-25-datacorehs-design-system-design.md|ne
 frontend/docs/superpowers/specs/2026-08-25-datacorehs-design-system-design.md|aplicar ali a frase "restrita a
 frontend/src/pages/Configuracoes.test.tsx|Esta página é restrita a
 frontend/src/pages/Configuracoes.tsx|Esta página é restrita a
+docs/superpowers/plans/2026-10-01-configuracoes.md|Acesso restrito a
+docs/superpowers/plans/2026-10-01-configuracoes.md|podem alterar configurações.
+frontend/src/pages/configuracoes/useSalvarConfiguracao.ts|podem alterar configurações.
+frontend/src/pages/Configuracoes.test.tsx|podem alterar configurações.
+frontend/src/pages/Configuracoes.test.tsx|Acesso restrito a
 docs/superpowers/specs/2026-09-24-login-microsoft-design.md|    Fale com o
 frontend/src/auth/erroSso.ts|    "Sua conta Microsoft não tem acesso ao DataCore. Fale com o
 frontend/src/auth/erroSso.test.ts|      "Sua conta Microsoft não tem acesso ao DataCore. Fale com o
