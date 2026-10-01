@@ -100,8 +100,21 @@ export interface ProjecaoDeFechamento {
   projetado: number;
   /** Qual dos dois métodos produziu o número. */
   metodo: MetodoDaProjecao;
-  /** Realizado ÷ mesmo período do ano anterior. `null` no método linear. */
+  /** O fator que multiplica o que falta: a combinação dos dois abaixo.
+   *  `null` no método linear. */
   fatorCrescimento: number | null;
+  /** Realizado ÷ mesmo período do trimestre no ano anterior. `null` quando
+   *  esse período do ano anterior faturou zero. */
+  fatorDoTrimestre: number | null;
+  /** Crescimento acumulado dos meses do ano ANTES do trimestre, contra os
+   *  mesmos meses do ano anterior. `null` sem mês antes do trimestre ou sem
+   *  faturamento nele. */
+  fatorDoAno: number | null;
+  /** Último mês (1-based) que entra no `fatorDoAno` — "jan–set" é 9. */
+  ultimoMesDoAno: number;
+  /** Quanto do fator combinado vem do trimestre, de 0 a 1: a fração do
+   *  trimestre do ano anterior que já teria passado. O resto vem do ano. */
+  pesoDoTrimestre: number;
   /** O ano cuja forma a projeção usou (ou usaria). */
   anoAnterior: number;
   /** Dias do trimestre já vividos (o mês corrente entra pelo dia de hoje). */
@@ -121,6 +134,11 @@ export interface EntradaDaProjecao {
   /** Faturamento de cada mês do ano ANTERIOR, índice 0 = janeiro. É a forma
    *  sazonal. Ausente ou zerado, a projeção cai no método linear. */
   totaisAnoAnterior?: number[];
+  /** Faturamento de cada mês do ano CORRENTE, índice 0 = janeiro. Dele sai
+   *  o crescimento acumulado dos meses antes do trimestre, que segura a
+   *  projeção enquanto o próprio trimestre tem poucos dias. Ausente, a
+   *  projeção usa só o fator do trimestre. */
+  totaisAnoCorrente?: number[];
 }
 
 /** Teto do fator de crescimento.
@@ -132,6 +150,12 @@ export interface EntradaDaProjecao {
  * absurdo; acima disso o que está errado é o denominador, não a empresa.
  */
 const TETO_DO_FATOR = 3;
+
+/** O fator limitado ao teto, ou `null` quando a base é zero. */
+function fatorLimitado(atual: number, base: number): number | null {
+  if (base <= 0) return null;
+  return Math.min(Math.max(atual / base, 0), TETO_DO_FATOR);
+}
 
 /** Projeta o fechamento do trimestre pela FORMA do mesmo trimestre do ano
  *  anterior, corrigida pelo crescimento do ano corrente.
@@ -151,7 +175,19 @@ const TETO_DO_FATOR = 3;
  *     projetado  = realizado + falta
  *
  * O fator responde "quanto este ano está acima ou abaixo do anterior"; o
- * período que resta, medido no ano anterior, carrega a forma sazonal. O mês
+ * período que resta, medido no ano anterior, carrega a forma sazonal.
+ *
+ * O fator é uma COMBINAÇÃO de dois. O do trimestre (realizado ÷ mesmo
+ * período do ano anterior) é o mais fiel, mas no começo sai de poucos dias —
+ * e no dia 1º, antes da primeira nota, sai zero e zeraria a projeção. O do
+ * ano (meses antes do trimestre, ano corrente ÷ anterior) já existe nesse
+ * momento. O peso do trimestre é a fração dele que já teria passado no ano
+ * anterior: no dia 1º quase tudo vem do ano, no fim quase tudo do trimestre.
+ *
+ *     peso   = anteriorDecorrido ÷ (anteriorDecorrido + anteriorRestante)
+ *     fator  = peso × fatorDoTrimestre + (1 − peso) × fatorDoAno
+ *
+ * Faltando um dos dois, vale o outro sozinho. O mês
  * corrente é repartido: a parte já decorrida é realizado e não se estima, a
  * parte que falta entra pelo mês correspondente do ano anterior, proporcional
  * aos dias que restam. Os dias saem do calendário do ano CORRENTE, o mesmo
@@ -175,6 +211,7 @@ export function projecaoDeFechamento({
   meses,
   hoje,
   totaisAnoAnterior = [],
+  totaisAnoCorrente = [],
 }: EntradaDaProjecao): ProjecaoDeFechamento {
   const ano = hoje.getFullYear();
   const mesDeHoje = hoje.getMonth() + 1;
@@ -208,24 +245,48 @@ export function projecaoDeFechamento({
     }
   }
 
-  const base = { anoAnterior, diasDecorridos, diasTotais };
+  // Os meses do ano antes do trimestre — todos já fechados, porque o
+  // trimestre já começou quando esta conta importa.
+  const ultimoMesDoAno = meses.length > 0 ? Math.min(...meses) - 1 : 0;
+  let correnteAntes = 0;
+  let anteriorAntes = 0;
+  for (let mes = 1; mes <= ultimoMesDoAno; mes++) {
+    correnteAntes += totaisAnoCorrente[mes - 1] ?? 0;
+    anteriorAntes += totaisAnoAnterior[mes - 1] ?? 0;
+  }
+  const fatorDoAno =
+    correnteAntes > 0 ? fatorLimitado(correnteAntes, anteriorAntes) : null;
+
+  const base = {
+    anoAnterior,
+    diasDecorridos,
+    diasTotais,
+    fatorDoAno,
+    ultimoMesDoAno,
+  };
+
+  const semFator = {
+    fatorCrescimento: null,
+    fatorDoTrimestre: null,
+    pesoDoTrimestre: 0,
+  };
 
   if (diasTotais === 0 || diasDecorridos === 0) {
     return {
       ...base,
+      ...semFator,
       disponivel: false,
       projetado: 0,
       metodo: "linear",
-      fatorCrescimento: null,
     };
   }
 
   const linear = {
     ...base,
+    ...semFator,
     disponivel: true,
     projetado: realizado * (diasTotais / diasDecorridos),
     metodo: "linear" as const,
-    fatorCrescimento: null,
   };
 
   // Sem base do ano anterior não há fator. Sem faturamento no que resta do
@@ -235,13 +296,19 @@ export function projecaoDeFechamento({
   // trimestre já encerrado é a exceção: ali não resta período nenhum, e é
   // isso mesmo que a projeção tem que dizer.
   const trimestreEncerrado = diasDecorridos >= diasTotais;
-  if (anteriorDecorrido <= 0) return linear;
+  const fatorDoTrimestre = fatorLimitado(realizado, anteriorDecorrido);
+  if (fatorDoTrimestre === null && fatorDoAno === null) return linear;
   if (anteriorRestante <= 0 && !trimestreEncerrado) return linear;
 
-  const fator = Math.min(
-    Math.max(realizado / anteriorDecorrido, 0),
-    TETO_DO_FATOR,
-  );
+  const pesoDoTrimestre =
+    fatorDoTrimestre === null
+      ? 0
+      : fatorDoAno === null
+        ? 1
+        : anteriorDecorrido / (anteriorDecorrido + anteriorRestante);
+  const fator =
+    pesoDoTrimestre * (fatorDoTrimestre ?? 0) +
+    (1 - pesoDoTrimestre) * (fatorDoAno ?? 0);
 
   return {
     ...base,
@@ -249,5 +316,7 @@ export function projecaoDeFechamento({
     projetado: realizado + anteriorRestante * fator,
     metodo: "sazonal",
     fatorCrescimento: fator,
+    fatorDoTrimestre,
+    pesoDoTrimestre,
   };
 }

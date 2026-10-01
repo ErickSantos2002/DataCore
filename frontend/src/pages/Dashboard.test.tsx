@@ -31,6 +31,7 @@ const estadoDashboard = vi.hoisted(() => ({
     totalAno: 0,
     serieMensal: [] as { mes: string; total: number }[],
     totaisAnoAnterior: [] as number[],
+    totaisAnoCorrente: [] as number[],
     carregando: false,
   },
 }));
@@ -92,6 +93,8 @@ interface Cenario {
   serieMensal?: { mes: string; total: number }[];
   /** Faturamento de cada mes do ano anterior, indice 0 = janeiro. */
   totaisAnoAnterior?: number[];
+  /** Faturamento de cada mes do ano corrente, indice 0 = janeiro. */
+  totaisAnoCorrente?: number[];
   carregando?: boolean;
 }
 
@@ -104,6 +107,7 @@ function montar({
   dados = [],
   serieMensal = [],
   totaisAnoAnterior = [],
+  totaisAnoCorrente = [],
   carregando = false,
 }: Cenario) {
   const configuracoes: { id: number; chave: string; valor: string }[] = [];
@@ -121,6 +125,7 @@ function montar({
     totalAno,
     serieMensal,
     totaisAnoAnterior,
+    totaisAnoCorrente,
     carregando,
   };
 
@@ -491,6 +496,33 @@ describe("Meta do trimestre — projeção de fechamento", () => {
     expect(
       screen.getByText(
         /sazonalidade do mesmo trimestre de 2025, corrigida pelo fator de crescimento 1,22× medido em 61 dias apurados dos 92 dias do trimestre/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("no dia 1o do trimestre, sem nota, projeta pelo crescimento do ano", () => {
+    // 01/10, realizado zero. Sem o crescimento do ano o fator do trimestre e
+    // zero e o card mostraria R$ 0,00 — foi assim que o caso apareceu.
+    pararORelogioEm(2026, 10, 1);
+    montar({
+      meta: "12000000",
+      meses: "10,11,12",
+      total: 0,
+      totaisAnoAnterior: [
+        ...Array<number>(9).fill(100_000),
+        310_000,
+        300_000,
+        310_000,
+      ],
+      totaisAnoCorrente: [...Array<number>(9).fill(110_000), 0, 0, 0],
+    });
+
+    // Peso do trimestre: 10.000 / 920.000. Fator: (1 - peso) x 1,1.
+    // Projetado: 910.000 x fator = 990.119,57.
+    expect(screen.getByText("R$ 990.119,57")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /corrigida pelo fator de crescimento 1,09×: 99% do crescimento acumulado de jan–set \(1,10×\) e 1% do medido em 1 dias apurados dos 92 dias do trimestre \(0,00×\)/,
       ),
     ).toBeInTheDocument();
   });

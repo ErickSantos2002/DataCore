@@ -31,6 +31,33 @@ function comoFator(fator: number): string {
   });
 }
 
+const MESES_CURTOS = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+];
+
+/** "jan–set" — os meses do ano que entram no crescimento acumulado. */
+function mesesDoAno(ultimoMes: number): string {
+  return ultimoMes === 1
+    ? MESES_CURTOS[0]
+    : `${MESES_CURTOS[0]}–${MESES_CURTOS[ultimoMes - 1]}`;
+}
+
+/** "99%" — o peso de cada fator, arredondado como se fala. */
+function comoPeso(peso: number): string {
+  return `${Math.round(peso * 100)}%`;
+}
+
 /** A meia-frase que abre o veredito. Ela muda com o método porque o método
  *  muda o que a frase promete: "no ritmo de hoje" é uma afirmação linear, e
  *  seria mentira em cima de uma conta sazonal. */
@@ -52,6 +79,16 @@ function comoFoiCalculada(projecao: ProjecaoDeFechamento): string {
   const janela = `${projecao.diasDecorridos} dias apurados dos ${projecao.diasTotais} dias do trimestre`;
 
   if (projecao.metodo === "sazonal" && projecao.fatorCrescimento !== null) {
+    // Com o fator do ano na conta, a linha diz quanto veio de cada lado —
+    // no começo do trimestre quase tudo vem do ano, e quem lê precisa saber
+    // que o número ainda não é o ritmo do trimestre.
+    if (projecao.fatorDoAno !== null && projecao.pesoDoTrimestre < 1) {
+      const doTrimestre =
+        projecao.fatorDoTrimestre !== null
+          ? ` e ${comoPeso(projecao.pesoDoTrimestre)} do medido em ${janela} (${comoFator(projecao.fatorDoTrimestre)}×)`
+          : "";
+      return `Projeção pela sazonalidade do mesmo trimestre de ${projecao.anoAnterior}, corrigida pelo fator de crescimento ${comoFator(projecao.fatorCrescimento)}×: ${comoPeso(1 - projecao.pesoDoTrimestre)} do crescimento acumulado de ${mesesDoAno(projecao.ultimoMesDoAno)} (${comoFator(projecao.fatorDoAno)}×)${doTrimestre}.`;
+    }
     return `Projeção pela sazonalidade do mesmo trimestre de ${projecao.anoAnterior}, corrigida pelo fator de crescimento ${comoFator(projecao.fatorCrescimento)}× medido em ${janela}.`;
   }
 

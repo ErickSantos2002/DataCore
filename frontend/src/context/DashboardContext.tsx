@@ -23,6 +23,10 @@ interface DashboardContextType {
    *  trimestre. Vazio quando não há dado do ano anterior — e aí a projeção
    *  cai no método linear e a tela diz que caiu. */
   totaisAnoAnterior: number[];
+  /** O faturamento de cada mês do ANO CORRENTE, índice 0 = janeiro — os doze,
+   *  sem o corte no mês corrente do `serieMensal`. Dele a projeção tira o
+   *  crescimento acumulado dos meses antes do trimestre. */
+  totaisAnoCorrente: number[];
   carregando: boolean;
 }
 
@@ -32,6 +36,7 @@ const DashboardContext = createContext<DashboardContextType>({
   totalAno: 0,
   serieMensal: [],
   totaisAnoAnterior: [],
+  totaisAnoCorrente: [],
   carregando: true,
 });
 
@@ -45,6 +50,7 @@ export const DashboardProvider = ({
   const [totalAno, setTotalAno] = useState(0);
   const [serieMensal, setSerieMensal] = useState<FaturamentoMensal[]>([]);
   const [totaisAnoAnterior, setTotaisAnoAnterior] = useState<number[]>([]);
+  const [totaisAnoCorrente, setTotaisAnoCorrente] = useState<number[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const { configuracoes, carregando: carregandoConfig } = useConfiguracoes();
@@ -83,11 +89,13 @@ export const DashboardProvider = ({
       // flutuante). Continua valendo, e agora por um motivo mais forte: quem
       // separa os meses é o banco, não esta tela.
       let totalAnoCompleto = 0;
+      let totaisDoAnoCorrente: number[] = [];
       let serieDoAno: FaturamentoMensal[] = [];
       let mesesEmApuracao: FaturamentoMensal[] = [];
 
       try {
         const totais = await totaisDoAno(anoAtual);
+        totaisDoAnoCorrente = totais;
         totalAnoCompleto = totais.reduce((acc, valor) => acc + valor, 0);
         // Mês futuro ficaria como barra vazia no fim do gráfico, sugerindo
         // queda onde só há calendário. O gráfico para no mês corrente.
@@ -132,6 +140,7 @@ export const DashboardProvider = ({
       setTotalAno(totalAnoCompleto);
       setSerieMensal(serieDoAno);
       setTotaisAnoAnterior(totaisDoAnoAnterior);
+      setTotaisAnoCorrente(totaisDoAnoCorrente);
       setCarregando(false);
     };
 
@@ -146,6 +155,7 @@ export const DashboardProvider = ({
         totalAno,
         serieMensal,
         totaisAnoAnterior,
+        totaisAnoCorrente,
         carregando,
       }}
     >

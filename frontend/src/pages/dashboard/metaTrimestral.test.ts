@@ -444,3 +444,130 @@ describe("projeção de fechamento — o trimestre de 2025 que motivou a troca",
     expect(linear.projetado - sazonal.projetado).toBeCloseTo(388_705.89, 2);
   });
 });
+
+/**
+ * O fator combinado — o crescimento do ano dando a largada.
+ *
+ * No começo do trimestre o fator medido nele mesmo sai de um ou dois dias, e
+ * no dia 1º, sem nota emitida, sai zero e zera a projeção inteira. O
+ * crescimento acumulado dos meses do ano ANTES do trimestre é a estimativa
+ * que já existe nesse momento. Os dois se combinam pelo peso do período já
+ * vivido no ano anterior: quanto mais do trimestre passou, mais o fator do
+ * próprio trimestre manda.
+ *
+ * Ano anterior: janeiro a setembro com 100 mil cada; outubro, novembro e
+ * dezembro com 300 mil cada (900 mil no trimestre). Ano corrente: janeiro a
+ * setembro com 110 mil cada — crescimento acumulado de 1,1×.
+ */
+describe("projeção de fechamento — o fator combinado com o crescimento do ano", () => {
+  const Q4 = [10, 11, 12];
+  const ANTERIOR = [
+    ...Array<number>(9).fill(100_000),
+    300_000,
+    300_000,
+    300_000,
+  ];
+  const CORRENTE = [...Array<number>(9).fill(110_000), 0, 0, 0];
+
+  it("no dia 1º, sem nota emitida, projeta pelo crescimento do ano em vez de zero", () => {
+    // O caso que motivou a combinação: 01/10, realizado zero. O fator do
+    // trimestre é 0 e, sozinho, zeraria a projeção.
+    const projecao = projecaoDeFechamento({
+      realizado: 0,
+      meses: Q4,
+      hoje: new Date(2026, 9, 1),
+      totaisAnoAnterior: ANTERIOR,
+      totaisAnoCorrente: CORRENTE,
+    });
+
+    const decorrido = 300_000 / 31;
+    const peso = decorrido / 900_000;
+    const fator = peso * 0 + (1 - peso) * 1.1;
+
+    expect(projecao.metodo).toBe("sazonal");
+    expect(projecao.fatorDoAno).toBeCloseTo(1.1, 6);
+    expect(projecao.fatorDoTrimestre).toBe(0);
+    expect(projecao.pesoDoTrimestre).toBeCloseTo(peso, 6);
+    expect(projecao.fatorCrescimento).toBeCloseTo(fator, 6);
+    expect(projecao.projetado).toBeCloseTo((900_000 - decorrido) * fator, 2);
+    expect(projecao.projetado).toBeGreaterThan(950_000);
+  });
+
+  it("no meio do trimestre, o fator do trimestre pesa o que já passou", () => {
+    // 30/11: outubro e novembro vividos (600 mil de 900 mil no ano anterior),
+    // peso 2/3. Realizado 720 mil é fator 1,2 no trimestre; combinado com
+    // 1,1 do ano dá 2/3 x 1,2 + 1/3 x 1,1 = 1,1667. Dezembro entra por
+    // 300 mil x 1,1667 = 350 mil.
+    const projecao = projecaoDeFechamento({
+      realizado: 720_000,
+      meses: Q4,
+      hoje: new Date(2026, 10, 30),
+      totaisAnoAnterior: ANTERIOR,
+      totaisAnoCorrente: CORRENTE,
+    });
+
+    expect(projecao.pesoDoTrimestre).toBeCloseTo(2 / 3, 6);
+    expect(projecao.fatorDoTrimestre).toBeCloseTo(1.2, 6);
+    expect(projecao.fatorCrescimento).toBeCloseTo(3.5 / 3, 6);
+    expect(projecao.projetado).toBeCloseTo(1_070_000, 2);
+  });
+
+  it("com o trimestre encerrado, continua sendo o próprio realizado", () => {
+    const projecao = projecaoDeFechamento({
+      realizado: 1_000_000,
+      meses: Q4,
+      hoje: new Date(2026, 11, 31),
+      totaisAnoAnterior: ANTERIOR,
+      totaisAnoCorrente: CORRENTE,
+    });
+
+    expect(projecao.pesoDoTrimestre).toBe(1);
+    expect(projecao.projetado).toBeCloseTo(1_000_000, 2);
+  });
+
+  it("sem mês antes do trimestre (janeiro a março), usa só o fator do trimestre", () => {
+    const anterior = Array<number>(12).fill(100_000);
+    const projecao = projecaoDeFechamento({
+      realizado: 330_000,
+      meses: [1, 2, 3],
+      hoje: new Date(2026, 1, 28),
+      totaisAnoAnterior: anterior,
+      totaisAnoCorrente: [150_000, 180_000, ...Array<number>(10).fill(0)],
+    });
+
+    // Janeiro e fevereiro vividos: 200 mil no ano anterior, fator 1,65.
+    expect(projecao.fatorDoAno).toBeNull();
+    expect(projecao.fatorCrescimento).toBeCloseTo(1.65, 6);
+    expect(projecao.projetado).toBeCloseTo(330_000 + 100_000 * 1.65, 2);
+  });
+
+  it("com o ano corrente zerado antes do trimestre, não inventa fator do ano", () => {
+    const projecao = projecaoDeFechamento({
+      realizado: 720_000,
+      meses: Q4,
+      hoje: new Date(2026, 10, 30),
+      totaisAnoAnterior: ANTERIOR,
+      totaisAnoCorrente: Array<number>(12).fill(0),
+    });
+
+    expect(projecao.fatorDoAno).toBeNull();
+    expect(projecao.fatorCrescimento).toBeCloseTo(1.2, 6);
+  });
+
+  it("o fator do ano também respeita o teto de 3x", () => {
+    const projecao = projecaoDeFechamento({
+      realizado: 0,
+      meses: Q4,
+      hoje: new Date(2026, 9, 1),
+      totaisAnoAnterior: [
+        ...Array<number>(9).fill(1),
+        300_000,
+        300_000,
+        300_000,
+      ],
+      totaisAnoCorrente: CORRENTE,
+    });
+
+    expect(projecao.fatorDoAno).toBe(3);
+  });
+});
