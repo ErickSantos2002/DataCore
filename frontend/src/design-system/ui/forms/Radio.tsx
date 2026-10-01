@@ -69,11 +69,13 @@ export const Radio = forwardRef<HTMLInputElement, RadioProps>(function Radio(
           aria-hidden="true"
           className={[
             "flex h-4 w-4 items-center justify-center rounded-full border bg-surface transition-colors",
-            "border-borda-strong peer-checked:border-action",
+            // A bolinha é FILHA deste span, e `peer-checked:` só alcança irmão
+            // do input: por isso a regra mora aqui e desce com `[&>span]`.
+            "border-borda-strong peer-checked:border-action peer-checked:[&>span]:opacity-100",
             "peer-focus-visible:ring-2 peer-focus-visible:ring-focus",
           ].join(" ")}
         >
-          <span className="h-2 w-2 rounded-full bg-action opacity-0 transition-opacity peer-checked:opacity-100" />
+          <span className="h-2 w-2 rounded-full bg-action opacity-0 transition-opacity" />
         </span>
       </span>
       {label ? (

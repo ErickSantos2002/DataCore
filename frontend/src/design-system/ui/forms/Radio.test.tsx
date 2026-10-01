@@ -36,3 +36,28 @@ describe("Radio", () => {
     expect(screen.getByRole("radio", { name: "Outbound" })).not.toBeChecked();
   });
 });
+
+describe("Radio — a pintura de marcado", () => {
+  it("toda classe peer-* mora num irmão do input, onde o Tailwind consegue aplicá-la", () => {
+    // `peer-checked:x` vira `.peer:checked ~ .x`: só pega IRMÃO do input. A
+    // bolinha do "marcado" morava num neto — o seletor nunca casava, e o rádio
+    // marcado aparecia vazio (visto em Configurações, 01/10/2026). O jsdom não
+    // calcula CSS, então o teste trava a estrutura que o seletor exige.
+    const { container } = render(
+      <RadioGroup
+        name="t"
+        value="a"
+        options={[{ value: "a", label: "A" }]}
+      />,
+    );
+    const input = container.querySelector("input")!;
+    const comPeer = [...container.querySelectorAll("[class]")].filter((el) =>
+      /(^|\s)peer-[a-z-]+:/.test(el.getAttribute("class") ?? ""),
+    );
+
+    expect(comPeer.length).toBeGreaterThan(0);
+    for (const el of comPeer) {
+      expect(el.parentElement).toBe(input.parentElement);
+    }
+  });
+});
