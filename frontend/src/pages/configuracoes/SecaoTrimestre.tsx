@@ -34,10 +34,14 @@ export function SecaoTrimestre({ valor, aoSalvar }: SecaoProps) {
   );
 
   const anoAtual = hoje.getFullYear();
-  const anos = [anoAtual - 1, anoAtual].map((a) => ({
-    value: String(a),
-    label: String(a),
-  }));
+  // O ano gravado entra na lista mesmo fora da janela padrão: sem ele, o
+  // Select mostraria outro ano e salvar gravaria o ano que a tela esconde.
+  const anos = [...new Set([gravado.ano, anoAtual - 1, anoAtual])]
+    .sort((x, y) => x - y)
+    .map((a) => ({
+      value: String(a),
+      label: String(a),
+    }));
   const trimestres = [1, 2, 3, 4].map((t) => ({
     value: String(t),
     label: `${t}º trimestre`,

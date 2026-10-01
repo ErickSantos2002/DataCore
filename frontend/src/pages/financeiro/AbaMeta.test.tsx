@@ -53,6 +53,19 @@ vi.mock("../../context/ConfiguracoesContext", () => ({
   }),
 }));
 
+const estadoAuth = vi.hoisted(() => ({
+  atual: {
+    user: { id: 1, username: "admin", role: "admin" } as {
+      id: number;
+      username: string;
+      role: string;
+    } | null,
+  },
+}));
+vi.mock("../../hooks/useAuth", () => ({
+  useAuth: () => ({ ...estadoAuth.atual, loading: false }),
+}));
+
 interface Cenario {
   /** Valor cru da chave META, como vem da tabela de configurações. */
   meta?: string;
@@ -384,6 +397,30 @@ describe("Aba Meta — projeção anual e crescimento vs ano passado", () => {
     const bloco = screen.getByText(/Faturamento do Ano Passado/).parentElement;
     expect(texto(bloco)).toContain("calculado da Visão Geral");
     expect(texto(bloco)).not.toContain("ano undefined");
+  });
+});
+
+describe("Aba Meta — quem pode editar a META", () => {
+  afterEach(() => {
+    estadoAuth.atual = { user: { id: 1, username: "admin", role: "admin" } };
+  });
+
+  it("quem não é admin vê a meta, mas não o lápis — o backend recusaria", () => {
+    // Desde out/2026 só admin grava configuração. O lápis para quem tem acesso
+    // ao Financeiro mas não é admin abriria um editor que sempre dá 403.
+    estadoAuth.atual = {
+      user: { id: 3, username: "financeiro", role: "financeiro" },
+    };
+    montar({ meta: META_4M });
+
+    expect(screen.queryByTitle("Editar")).not.toBeInTheDocument();
+    expect(screen.getAllByText("R$ 4.000.000,00").length).toBeGreaterThan(0);
+  });
+
+  it("o admin vê o lápis", () => {
+    montar({ meta: META_4M });
+
+    expect(screen.getByTitle("Editar")).toBeInTheDocument();
   });
 });
 

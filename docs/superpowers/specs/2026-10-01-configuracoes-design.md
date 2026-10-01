@@ -123,10 +123,11 @@ Quem passa a usar:
 - Com `fixado`, o cabeçalho da meta mostra um aviso: "Trimestre fixado em
   Configurações: 3º de 2026. O painel não está seguindo o calendário."
 
-A `002` cria `TRIMESTRE_APURACAO = 'auto'`; a `003` apaga `MESES_ANALISE`. Nenhum
-outro sistema lê `MESES_ANALISE` (varrido em `~/github` em 01/10/2026).
+A `002` cria `TRIMESTRE_APURACAO = 'auto'`; a `003` apaga `MESES_ANALISE`. ⚠️ A skill
+`faturamento` do **HS.OS** lê `MESES_ANALISE` num SQL dentro de `SKILL.md` (achado na
+revisão final — a varredura de 01/10 só olhou código): a `003` espera também a parte 4.
 
-**Ordem de deploy:** `002` → deploy do backend e do front → `003`. O front novo
+**Ordem de deploy:** `002` → deploy do backend e do front → skill do HS.OS sem `MESES_ANALISE` (parte 4) → `003`. O front novo
 trata a ausência de `TRIMESTRE_APURACAO` como `auto`; o **antigo** sem
 `MESES_ANALISE` ficaria sem meses.
 
@@ -184,6 +185,13 @@ Diferenças que a migração tem que enfrentar, e não esconder:
    unidades na apuração de 30/09). Rodar as duas réguas lado a lado e explicar
    cada diferença antes de trocar — a skill `faturamento` do HS.OS documenta a
    mesma régua e muda junto.
+
+5. **`MESES_ANALISE`.** `backend/skills/faturamento/SKILL.md` (seção da meta, ~linha
+   105–125) monta `meses AS (SELECT ... WHERE chave='MESES_ANALISE')` e faz cross join.
+   Sem a chave, o agente responde realizado = 0 sem erro. Trocar por `TRIMESTRE_APURACAO`
+   (`auto` = trimestre do calendário; `AAAA-TN` = fixado) **antes** da migração `003`
+   do DataCore. A META agora é sempre gravada como `12666666.72`, então o
+   `valor::numeric/4` de lá para de depender do formato.
 
 Depois disso no ar: `DELETE FROM tiny.configuracoes WHERE chave IN ('CFOP_VALIDOS',
 'MARCADORES_INVALIDOS')`, por script no Konsole.

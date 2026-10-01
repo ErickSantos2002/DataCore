@@ -12,6 +12,7 @@ import {
   proximaFaixa as acharProximaFaixa,
 } from "./meta";
 import { ListaDeFaixas } from "./ListaDeFaixas";
+import { useAuth } from "../../hooks/useAuth";
 import { ValorEditavel } from "./ValorEditavel";
 
 export interface AbaMetaProps {
@@ -34,6 +35,7 @@ const AbaMeta: React.FC<AbaMetaProps> = ({
 }) => {
   const { total, totalAno, dados, carregando } = useDashboard();
   const { configuracoes, editarConfiguracao } = useConfiguracoes();
+  const { user } = useAuth();
 
   const metaAnual = useMemo(
     () => lerValorDaMeta(configuracoes.find((c) => c.chave === "META")?.valor),
@@ -71,6 +73,7 @@ const AbaMeta: React.FC<AbaMetaProps> = ({
             sublabel="(base · 65% · 1,0×)"
             valor={metaAnual}
             onSalvar={(valor) => editarConfiguracao("META", valor)}
+            editavel={user?.role === "admin"}
           />
           <div className="flex-1">
             <p className="text-sm text-conteudo-muted">

@@ -116,9 +116,10 @@ SQL manual em `migrations/`, rodado no Konsole com o superusuário do cadastro c
 
     bash scripts/migrar_tiny.sh 002_configuracoes_historico.sql
 
-Ordem da entrega de Configurações (out/2026): `002` → deploy do backend e do front → `003`.
-A `002` cria `tiny.configuracoes_historico` (o backend novo grava nela em todo `PUT`) e a
-chave `TRIMESTRE_APURACAO`; a `003` apaga `MESES_ANALISE`, que o front antigo ainda lê.
+Ordem da entrega de Configurações (out/2026): `002` → deploy do backend e do front →
+skill `faturamento` do HS.OS sem `MESES_ANALISE` → `003`. A `002` cria
+`tiny.configuracoes_historico` (o backend novo grava nela em todo `PUT`) e a chave
+`TRIMESTRE_APURACAO`; a `003` apaga `MESES_ANALISE`, que o front antigo e o HS.OS ainda leem.
 
 ---
 

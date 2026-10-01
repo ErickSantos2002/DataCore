@@ -367,3 +367,33 @@ describe("Configuracoes — histórico", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("Configuracoes — trimestre fixado em ano fora da lista", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("o seletor mostra o ano gravado, para não gravar um ano que a tela esconde", async () => {
+    // 2025-T4 ainda fixado em janeiro de 2027: a lista padrão (2026, 2027) não
+    // tem 2025. Sem ele na lista, o Select mostraria 2026 e mudar só o
+    // trimestre gravaria "2025-TN" sem ninguém ver.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2027, 0, 2));
+    const config = SEMENTE.map((c) =>
+      c.chave === "TRIMESTRE_APURACAO" ? { ...c, valor: "2025-T4" } : c,
+    );
+    const { configValue } = renderConfiguracoes({
+      config: { configuracoes: config },
+    });
+
+    expect(screen.getByLabelText("Ano")).toHaveValue("2025");
+    fireEvent.change(screen.getByLabelText("Trimestre"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar trimestre" }));
+    await waitFor(() =>
+      expect(configValue.editarConfiguracao).toHaveBeenCalledWith(
+        "TRIMESTRE_APURACAO",
+        "2025-T3",
+      ),
+    );
+  });
+});

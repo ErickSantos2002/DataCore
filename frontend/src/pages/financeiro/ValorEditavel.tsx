@@ -10,6 +10,8 @@ export interface ValorEditavelProps {
   valor: number;
   /** Recebe o valor já normalizado, com ponto decimal e duas casas. */
   onSalvar: (valorTexto: string) => Promise<void>;
+  /** false esconde o lápis: só admin grava configuração (o backend dá 403). */
+  editavel?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export function ValorEditavel({
   sublabel,
   valor,
   onSalvar,
+  editavel = true,
 }: ValorEditavelProps) {
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState("");
@@ -68,14 +71,16 @@ export function ValorEditavel({
           <p className="text-2xl font-bold text-conteudo-heading">
             {formatarDinheiro(valor)}
           </p>
-          <button
-            type="button"
-            onClick={abrir}
-            title="Editar"
-            className="rounded text-action transition-colors hover:text-action-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-          </button>
+          {editavel && (
+            <button
+              type="button"
+              onClick={abrir}
+              title="Editar"
+              className="rounded text-action transition-colors hover:text-action-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
       ) : (
         <div className="mt-1 flex items-start gap-2">
