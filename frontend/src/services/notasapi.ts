@@ -503,13 +503,15 @@ export const fetchConfiguracoes = async (): Promise<Configuracao[]> => {
   return response.data;
 };
 
-/** `unknown`: o ConfiguracoesContext descarta o retorno e atualiza o estado
- *  local com o valor que ele mesmo mandou. */
+/** Devolve a configuração como ficou gravada: o backend normaliza o valor
+ *  (a META digitada "13.000.000,00" volta "13000000.00"). */
 export const updateConfiguracao = async (
   chave: string,
   valor: string,
-): Promise<unknown> => {
-  const response = await api.put(`/configuracoes/${chave}`, { valor });
+): Promise<Configuracao> => {
+  const response = await api.put<Configuracao>(`/configuracoes/${chave}`, {
+    valor,
+  });
   return response.data;
 };
 
@@ -522,6 +524,28 @@ export const createConfiguracao = async (
     chave,
     valor,
   });
+  return response.data;
+};
+
+export interface HistoricoConfiguracao {
+  id: number;
+  chave: string;
+  /** null quando a chave foi criada. */
+  valor_anterior: string | null;
+  valor_novo: string;
+  alterado_por: string;
+  /** ISO 8601, com fuso. */
+  alterado_em: string;
+}
+
+/** As últimas alterações de configuração, mais recente primeiro. Só admin. */
+export const fetchHistoricoConfiguracoes = async (
+  limite = 20,
+): Promise<HistoricoConfiguracao[]> => {
+  const response = await api.get<HistoricoConfiguracao[]>(
+    "/configuracoes/historico",
+    { params: { limite } },
+  );
   return response.data;
 };
 

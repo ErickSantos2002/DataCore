@@ -47,10 +47,12 @@ export const ConfiguracoesProvider = ({
     carregar();
   }, []);
 
+  // O estado recebe o valor que o backend GRAVOU (normalizado), não o digitado.
+  // Erro sobe para quem chamou — a página mostra a mensagem.
   const editarConfiguracao = async (chave: string, valor: string) => {
-    await updateConfiguracao(chave, valor);
+    const gravada = await updateConfiguracao(chave, valor);
     setConfiguracoes((prev) =>
-      prev.map((c) => (c.chave === chave ? { ...c, valor } : c)),
+      prev.map((c) => (c.chave === chave ? { ...c, valor: gravada.valor } : c)),
     );
   };
 
