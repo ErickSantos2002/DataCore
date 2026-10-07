@@ -115,6 +115,24 @@ describe("comissão de vendas — rateio de 1%", () => {
     expect(rateioPorVendedor(1_000_000, 4)).toBe(2_500);
   });
 
+  it("não existe abaixo de 500 mil de faturamento da empresa", () => {
+    expect(rateioPorVendedor(499_999.99, 4)).toBe(0);
+    expect(rateioPorVendedor(500_000, 4)).toBe(1_250);
+  });
+
+  it("abaixo do mínimo cada vendedor recebe só comissão e bônus", () => {
+    const { linhas, rateio } = calcularComissoes(
+      [vendedor({ id: "a", inbound: 100_000 }), vendedor({ id: "b" })],
+      400_000,
+    );
+
+    expect(rateio).toBe(0);
+    expect(linhas[0].recebe).toBe(750); // 100.000 × 0,75%, sem bônus
+    expect(linhas[0].peloRateio).toBe(false);
+    expect(linhas[1].recebe).toBe(0);
+    expect(linhas[1].peloRateio).toBe(false);
+  });
+
   it("sem vendedor nenhum não divide por zero", () => {
     expect(rateioPorVendedor(1_000_000, 0)).toBe(0);
   });

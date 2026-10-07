@@ -9,6 +9,7 @@ import {
 } from "../../lib/dinheiro";
 import { baixarPlanilha } from "../../lib/planilha";
 import {
+  FATURAMENTO_MINIMO_DO_RATEIO,
   INCENTIVOS_ATIVOS,
   calcularComissoes,
   lerVendedorDigitado,
@@ -149,6 +150,13 @@ const AbaComissao: React.FC = () => {
               {vendedores.length === 1 ? "vendedor" : "vendedores"})
             </span>
           </p>
+          {faturamentoTotal !== "" &&
+            converterParaNumero(faturamentoTotal) <
+              FATURAMENTO_MINIMO_DO_RATEIO && (
+              <p className="pb-2 text-sm text-conteudo-muted">
+                Sem rateio: faturamento abaixo de R$ 500 mil.
+              </p>
+            )}
         </div>
       </Card>
 

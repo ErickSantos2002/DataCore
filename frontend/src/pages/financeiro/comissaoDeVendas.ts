@@ -29,6 +29,12 @@ export const PREMIO_POR_RECOMPRA_ATIVA = 100;
 export const FRACAO_DO_RATEIO = 0.01;
 
 /**
+ * Abaixo deste faturamento da empresa no mês não há rateio nenhum: o piso
+ * só existe quando o mês foi bom para todos. Exatamente 500 mil já conta.
+ */
+export const FATURAMENTO_MINIMO_DO_RATEIO = 500_000;
+
+/**
  * Os dois incentivos existem na regra publicada mas ainda não foram
  * confirmados: ninguém sabe ao certo o que conta como "negociação extra" nem
  * o que caracteriza uma recompra ativada. A conta está pronta e testada; o
@@ -112,7 +118,8 @@ export function bonusPorDesempenho(totalDoVendedor: number): number {
 
 /**
  * O mínimo garantido: 1% do faturamento da empresa dividido igualmente entre
- * todos os vendedores ativos.
+ * todos os vendedores ativos — desde que a empresa tenha faturado ao menos
+ * `FATURAMENTO_MINIMO_DO_RATEIO` no mês; abaixo disso, é zero.
  *
  * Divide pela lista inteira, não só por quem vendeu: o rateio existe
  * justamente para proteger quem ainda não formou carteira.
@@ -122,6 +129,7 @@ export function rateioPorVendedor(
   quantidadeDeVendedores: number,
 ): number {
   if (quantidadeDeVendedores <= 0) return 0;
+  if (faturamentoTotal < FATURAMENTO_MINIMO_DO_RATEIO) return 0;
   return (faturamentoTotal * FRACAO_DO_RATEIO) / quantidadeDeVendedores;
 }
 

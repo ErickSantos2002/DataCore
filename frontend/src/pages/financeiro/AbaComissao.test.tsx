@@ -198,6 +198,18 @@ describe("Calculadora de Comissão — o rateio de 1%", () => {
     ).toContain("R$ 5.000,00");
   });
 
+  it("avisa que não há rateio quando a empresa fatura menos de 500 mil", () => {
+    render(<AbaComissao />);
+    adicionarVendedor(1, { nome: "Ana", inbound: "10.000" });
+
+    digitar("Faturamento total da empresa (base do rateio)", "400.000");
+
+    expect(
+      texto(screen.getByText(/Rateio por vendedor/).parentElement),
+    ).toContain("R$ 0,00");
+    expect(screen.getByText(/abaixo de R\$ 500 mil/)).toBeInTheDocument();
+  });
+
   it("marca quem está recebendo pelo piso, e não pela venda", () => {
     // O Financeiro precisa enxergar isso de relance: é a diferença entre
     // "vendeu bem" e "não vendeu e o mínimo garantido cobriu".
