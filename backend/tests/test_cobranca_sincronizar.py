@@ -173,6 +173,15 @@ def test_observacao_grava_apaga_e_registra_evento(db, contas):
     assert db.execute(text("SELECT count(*) FROM tiny.cobranca_empresas")).scalar() == 0
 
 
+def test_observacao_vazia_sem_observacao_previa_nao_gera_evento(db, contas):
+    from app.services.cobranca import gravar_observacao, sincronizar
+
+    contas(venceu_ha=40)
+    sincronizar(db, HOJE)
+    gravar_observacao(db, "11111111", "   ", "erick")
+    assert db.execute(text("SELECT count(*) FROM tiny.cobranca_eventos WHERE tipo = 'observacao'")).scalar() == 0
+
+
 # ───────────────────────────────────────────── o gancho no job extrair_contas
 
 def _rodar_carregar(monkeypatch, tipo, dry_run, sincronizar):
@@ -182,7 +191,10 @@ def _rodar_carregar(monkeypatch, tipo, dry_run, sincronizar):
 
     monkeypatch.setattr(extrair_contas, "TinyAPI", lambda *a, **k: object())
     monkeypatch.setattr(extrair_contas, "processar", lambda api, db, t, args: ({}, 0))
-    monkeypatch.setattr(extrair_contas, "sincronizar_cobranca", sincronizar)
+    from app.services import cobranca as servico_cobranca
+
+    # o gancho importa dentro do try; o teste troca a função no módulo de origem
+    monkeypatch.setattr(servico_cobranca, "sincronizar", sincronizar)
 
     class SessaoFalsa:
         commits = rollbacks = 0
@@ -219,6 +231,30 @@ def test_job_nao_falha_quando_a_sincronizacao_quebra(monkeypatch):
     assert codigo == 0 and sessao.rollbacks == 1
     assert "Sincronização da cobrança falhou" in registro.detalhe
     assert "banco fora" in registro.detalhe
+    assert registro.contagens["cobrança: falhou"] == 1
+
+
+def test_job_nao_falha_quando_o_import_da_cobranca_quebra(monkeypatch):
+    import builtins
+
+    original = builtins.__import__
+
+    def import_quebrado(nome, *a, **k):
+        if nome == "app.core.inadimplencia":
+            raise ImportError("módulo fora")
+        return original(nome, *a, **k)
+
+    def nao_chega(db, hoje):
+        raise AssertionError("não deveria chegar")
+
+    import types
+    from app.jobs import extrair_contas
+
+    monkeypatch.setattr(builtins, "__import__", import_quebrado)
+    codigo, registro, sessao = _rodar_carregar(monkeypatch, "receber", False, nao_chega)
+    assert codigo == 0
+    assert "módulo fora" in registro.detalhe
+    assert registro.contagens["cobrança: falhou"] == 1
 
 
 @pytest.mark.parametrize("tipo, dry_run", [("receber", True), ("pagar", False)])

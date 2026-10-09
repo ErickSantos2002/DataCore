@@ -108,7 +108,7 @@ def exigir_admin(usuario: Usuario = Depends(usuario_atual)) -> Usuario:
     return usuario
 
 
-def exigir_papeis(*papeis: str):
+def exigir_papeis(*papeis: str, mensagem: str = "Acesso restrito."):
     """Dependência que deixa passar só os papéis listados — a regra no backend, não só no menu.
 
     Uso: `usuario: Usuario = Depends(exigir_papeis("admin", "financeiro"))`.
@@ -117,7 +117,7 @@ def exigir_papeis(*papeis: str):
 
     def _exigir(usuario: Usuario = Depends(usuario_atual)) -> Usuario:
         if usuario.papel.nome not in permitidos:
-            raise HTTPException(status_code=403, detail="Acesso restrito ao financeiro.")
+            raise HTTPException(status_code=403, detail=mensagem)
         return usuario
 
     return _exigir

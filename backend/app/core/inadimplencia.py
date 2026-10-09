@@ -7,6 +7,7 @@ outro lugar. A tela recebe tudo somado, como em `contas_agregado.py` (item 9.4).
 """
 from datetime import date, datetime
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -30,6 +31,14 @@ FAIXAS = {"atraso": (1, 30), "31_60": (31, 60), "61_90": (61, 90), "90_mais": (9
 ANO_INICIAL = 2019
 #: Quantos meses a série mensal mostra.
 MESES_NA_SERIE = 24
+
+
+FUSO_DA_EMPRESA = ZoneInfo("America/Sao_Paulo")
+
+
+def hoje_na_empresa() -> date:
+    """O dia na empresa: o container roda em UTC e, depois das 21h em Brasília, date.today() já é amanhã."""
+    return datetime.now(FUSO_DA_EMPRESA).date()
 
 
 def params_base(hoje: date) -> dict:
@@ -251,7 +260,9 @@ SQL_LISTA = """
            OR lower(e.nome) LIKE '%' || lower(CAST(:busca AS text)) || '%'
            OR (length(regexp_replace(CAST(:busca AS text), '[^0-9]', '', 'g')) >= 3
                AND EXISTS (SELECT 1 FROM t WHERE t.empresa = e.empresa
-                   AND t.doc LIKE '%' || regexp_replace(CAST(:busca AS text), '[^0-9]', '', 'g') || '%')))
+                   AND t.doc LIKE '%' || regexp_replace(CAST(:busca AS text), '[^0-9]', '', 'g') || '%'))
+           OR EXISTS (SELECT 1 FROM t WHERE t.empresa = e.empresa
+                   AND lower(t.cliente_nome) LIKE '%' || lower(CAST(:busca AS text)) || '%'))
 )
 """
 
@@ -351,7 +362,7 @@ def valores_da_empresa(db: Session, hoje: date, empresa: str) -> Optional[dict]:
 def filiais_da_empresa(db: Session, empresa: str) -> set:
     linhas = db.execute(
         text(SQL_BASE + "SELECT DISTINCT doc FROM t WHERE empresa = :empresa AND doc <> ''"),
-        {**params_base(date.today()), "empresa": empresa},
+        {**params_base(hoje_na_empresa()), "empresa": empresa},
     ).scalars()
     return set(linhas)
 

@@ -4,7 +4,6 @@ Nenhuma função aqui faz commit — quem chama decide (a rota, ou o job de cont
 Spec: docs/superpowers/specs/2026-10-09-inadimplencia-design.md
 """
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.inadimplencia import (
+    FUSO_DA_EMPRESA,
     SQL_BASE,
     filiais_da_empresa,
     params_base,
@@ -22,7 +22,6 @@ STATUS_DO_SISTEMA = {"sem_contato", "quebrada", "pago"}
 STATUS_MANUAIS = {"em_contato", "respondeu", "promessa", "negociacao", "contestado", "juridico", "perda"}
 CANAIS = {"telefone", "email", "whatsapp", "presencial", "outro"}
 SISTEMA = "sistema"
-FUSO_DA_EMPRESA = ZoneInfo("America/Sao_Paulo")
 
 
 class ErroDeCobranca(Exception):
@@ -240,5 +239,5 @@ def gravar_observacao(db: Session, empresa: str, texto: str, usuario: str) -> No
     ciclo = _ciclo_aberto(db, empresa)
     if ciclo is not None and antes:
         _evento(db, ciclo["id"], por=usuario, tipo="observacao", anotacao=f"Antes: {antes}")
-    elif ciclo is not None:
+    elif ciclo is not None and texto:
         _evento(db, ciclo["id"], por=usuario, tipo="observacao", anotacao="Observação criada.")

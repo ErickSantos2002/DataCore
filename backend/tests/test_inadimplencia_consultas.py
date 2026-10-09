@@ -106,6 +106,27 @@ def test_busca_por_nome_e_por_cnpj_com_e_sem_pontuacao(db, contas):
     assert [e.nome for e in _pagina(db, busca="22222222").itens] == ["Beta SA"]
 
 
+def test_busca_acha_pela_grafia_antiga_do_nome(db, contas):
+    contas(nome="Velha Razao Ltda", doc="11111111000111", venceu_ha=60)
+    contas(nome="Alfa Ltda", doc="11111111000111", venceu_ha=40)
+    assert [e.nome for e in _pagina(db, busca="velha razao").itens] == ["Alfa Ltda"]
+
+
+def test_hoje_na_empresa_usa_o_fuso_de_sao_paulo(monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.core import inadimplencia
+
+    class RelogioFalso(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            # 23h em Brasília (UTC-3) do dia 9 já é 02h do dia 10 em UTC
+            return datetime(2026, 10, 10, 2, 0, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(inadimplencia, "datetime", RelogioFalso)
+    assert inadimplencia.hoje_na_empresa() == date(2026, 10, 9)
+
+
 def test_status_sem_ciclo_e_sem_contato(db, contas):
     contas(venceu_ha=40)
     assert _pagina(db).itens[0].status == "sem_contato"

@@ -48,7 +48,6 @@ from datetime import date, timedelta
 
 from app.core.config import settings
 from app.models.database import SessionLocal
-from app.services.cobranca import sincronizar as sincronizar_cobranca
 from app.services.execucao import registrar_execucao
 from app.services.tiny_api import (ESPERA_PADRAO, TinyAPI, TinyAPIError,
                                    TinyNaoLocalizado, TinySemRegistros)
@@ -211,7 +210,10 @@ def _carregar(args, registro) -> int:
         # próxima, e o motivo fica no detalhe da execução (tela de Importações).
         if "receber" in tipos and not args.dry_run:
             try:
-                mudancas = sincronizar_cobranca(db, date.today())
+                # importado aqui dentro: erro de import da cobrança nunca derruba a carga
+                from app.core.inadimplencia import hoje_na_empresa
+                from app.services.cobranca import sincronizar as sincronizar_cobranca
+                mudancas = sincronizar_cobranca(db, hoje_na_empresa())
                 db.commit()
                 for acao, quantas in mudancas.items():
                     tudo[f"cobrança: {acao}"] = quantas
@@ -219,6 +221,8 @@ def _carregar(args, registro) -> int:
                 db.rollback()
                 logger.exception("sincronização da cobrança falhou")
                 registro.detalhe = f"Sincronização da cobrança falhou: {erro}"
+                # a tela de Importações mostra as contagens; o detalhe sozinho passa batido
+                tudo["cobrança: falhou"] = 1
     finally:
         db.close()
     registro.contagens = tudo

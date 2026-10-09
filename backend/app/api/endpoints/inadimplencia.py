@@ -3,7 +3,6 @@
 Todas as rotas exigem admin ou financeiro NO BACKEND — a tela também esconde, mas a
 regra não pode morar só nela. Spec: docs/superpowers/specs/2026-10-09-inadimplencia-design.md
 """
-from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core import inadimplencia as consultas
+from app.core.inadimplencia import hoje_na_empresa
 from app.core.contas_agregado import ContaDaTela
 from app.core.paginacao import limite_query, offset_query
 from app.core.security import exigir_papeis
@@ -19,7 +19,7 @@ from app.models.usuario import Usuario
 from app.services import cobranca
 
 router = APIRouter(prefix="/inadimplencia", tags=["Inadimplência"])
-FINANCEIRO = exigir_papeis("admin", "financeiro")
+FINANCEIRO = exigir_papeis("admin", "financeiro", mensagem="Acesso restrito ao financeiro.")
 TODOS_OS_STATUS = cobranca.STATUS_DO_SISTEMA | cobranca.STATUS_MANUAIS
 
 
@@ -33,7 +33,7 @@ def get_db():
 
 @router.get("/resumo", response_model=consultas.ResumoDeInadimplencia)
 def resumo(db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
-    return consultas.resumo(db, date.today())
+    return consultas.resumo(db, hoje_na_empresa())
 
 
 @router.get("/empresas", response_model=consultas.PaginaDeEmpresas)
@@ -56,12 +56,12 @@ def empresas(
     if status and not set(status) <= TODOS_OS_STATUS:
         raise HTTPException(422, "Status desconhecido no filtro.")
     return consultas.pagina_de_empresas(
-        db, date.today(), busca=busca, status=status, faixa=faixa, incluir_atraso=incluir_atraso,
+        db, hoje_na_empresa(), busca=busca, status=status, faixa=faixa, incluir_atraso=incluir_atraso,
         ordenar_por=ordenar_por, direcao=direcao, limite=limite, offset=offset)
 
 
 def _detalhe_ou_404(db, empresa):
-    d = consultas.detalhe_da_empresa(db, date.today(), empresa)
+    d = consultas.detalhe_da_empresa(db, hoje_na_empresa(), empresa)
     if d is None:
         raise HTTPException(404, "Empresa sem título vencido em aberto.")
     return d
@@ -74,12 +74,12 @@ def detalhe(empresa: str, db: Session = Depends(get_db), _u: Usuario = Depends(F
 
 @router.get("/empresas/{empresa}/titulos", response_model=List[ContaDaTela])
 def titulos(empresa: str, db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
-    return consultas.titulos_da_empresa(db, date.today(), empresa)
+    return consultas.titulos_da_empresa(db, hoje_na_empresa(), empresa)
 
 
 @router.get("/indicadores", response_model=consultas.Indicadores)
 def indicadores(db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
-    return consultas.indicadores(db, date.today())
+    return consultas.indicadores(db, hoje_na_empresa())
 
 
 class TextoDaObservacao(BaseModel):
@@ -90,7 +90,7 @@ class TextoDaObservacao(BaseModel):
 def registrar_evento(empresa: str, dados: cobranca.NovoEvento, db: Session = Depends(get_db),
                      usuario: Usuario = Depends(FINANCEIRO)):
     try:
-        cobranca.registrar_evento(db, date.today(), empresa, dados, usuario.username)
+        cobranca.registrar_evento(db, hoje_na_empresa(), empresa, dados, usuario.username)
         db.commit()
     except cobranca.ErroDeCobranca as erro:
         db.rollback()
