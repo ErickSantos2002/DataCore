@@ -213,4 +213,71 @@ describe("Inadimplência — modal da empresa", () => {
     expect(falso.atual!.estado.observacoes).toEqual([{ empresa: "11111111", texto: "Pagam dia 10" }]);
     expect(within(modal).getByText("Pagam dia 10")).toBeInTheDocument();
   });
+
+  async function formulario() {
+    const modal = await abrir();
+    fireEvent.click(within(modal).getByRole("button", { name: "Registrar contato" }));
+    return modal;
+  }
+
+  it("registra contato com promessa", async () => {
+    const modal = await formulario();
+    fireEvent.change(within(modal).getByLabelText("Canal"), { target: { value: "telefone" } });
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "promessa" } });
+    fireEvent.change(within(modal).getByLabelText("Data prometida"), { target: { value: "2099-01-10" } });
+    fireEvent.change(within(modal).getByLabelText("Valor prometido"), { target: { value: "1.500,50" } });
+    fireEvent.change(within(modal).getByLabelText("Anotação"), { target: { value: "Falei com a Joana" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    const [{ empresa, dados }] = falso.atual!.estado.eventos;
+    expect(empresa).toBe("11111111");
+    expect(dados).toMatchObject({ canal: "telefone", status_novo: "promessa", anotacao: "Falei com a Joana",
+                                  promessa: { data: "2099-01-10", valor: 1500.5 } });
+  });
+
+  it("os campos da promessa só aparecem com o status Promessa", async () => {
+    const modal = await formulario();
+    expect(within(modal).queryByLabelText("Data prometida")).toBeNull();
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "promessa" } });
+    expect(within(modal).getByLabelText("Data prometida")).toBeInTheDocument();
+  });
+
+  it("trocar de Promessa para outro status não manda a promessa", async () => {
+    const modal = await formulario();
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "promessa" } });
+    fireEvent.change(within(modal).getByLabelText("Data prometida"), { target: { value: "2099-01-10" } });
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "negociacao" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    const [{ dados }] = falso.atual!.estado.eventos;
+    expect(dados.status_novo).toBe("negociacao");
+    expect(dados.promessa).toBeNull();
+  });
+
+  it("os status do sistema não são oferecidos", async () => {
+    const modal = await formulario();
+    const opcoes = within(within(modal).getByLabelText("Novo status")).getAllByRole("option").map((o) => o.textContent);
+    expect(opcoes).not.toContain("Pago");
+    expect(opcoes).not.toContain("Promessa quebrada");
+    expect(opcoes).not.toContain("Sem contato");
+  });
+
+  it("sem canal nem status, não grava e avisa", async () => {
+    const modal = await formulario();
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    expect(falso.atual!.estado.eventos).toHaveLength(0);
+    expect(within(modal).getByText("Escolha o canal do contato ou um novo status.")).toBeInTheDocument();
+  });
+
+  it("erro do backend aparece no modal e o que foi digitado fica", async () => {
+    falso.atual!.estado.erroDeGravacao = "A data prometida já passou.";
+    const modal = await formulario();
+    fireEvent.change(within(modal).getByLabelText("Canal"), { target: { value: "email" } });
+    fireEvent.change(within(modal).getByLabelText("Anotação"), { target: { value: "Texto longo" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    expect(within(modal).getByRole("alert")).toHaveTextContent("A data prometida já passou.");
+    expect(within(modal).getByLabelText("Anotação")).toHaveValue("Texto longo");
+  });
 });
