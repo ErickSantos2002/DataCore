@@ -3,10 +3,13 @@
 Todas as rotas exigem admin ou financeiro NO BACKEND — a tela também esconde, mas a
 regra não pode morar só nela. Spec: docs/superpowers/specs/2026-10-09-inadimplencia-design.md
 """
-from datetime import date
+import logging
+from datetime import date, datetime
 from typing import List, Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,7 +20,9 @@ from app.core.paginacao import limite_query, offset_query
 from app.core.security import exigir_papeis
 from app.models.database import SessionLocal
 from app.models.usuario import Usuario
-from app.services import cobranca
+from app.services import anexos, cobranca
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/inadimplencia", tags=["Inadimplência"])
 FINANCEIRO = exigir_papeis("admin", "financeiro", mensagem="Acesso restrito ao financeiro.")
@@ -126,16 +131,22 @@ class TextoDaObservacao(BaseModel):
     texto: str = ""
 
 
-@router.post("/empresas/{empresa}/eventos", response_model=consultas.DetalheDaEmpresa)
+class DetalheComEventoNovo(consultas.DetalheDaEmpresa):
+    #: o evento que acabou de ser gravado — pela ordem da linha do tempo (data do contato)
+    #: ele nem sempre é o primeiro, e a tela precisa do id para mandar os anexos.
+    evento_id: int
+
+
+@router.post("/empresas/{empresa}/eventos", response_model=DetalheComEventoNovo)
 def registrar_evento(empresa: str, dados: cobranca.NovoEvento, db: Session = Depends(get_db),
                      usuario: Usuario = Depends(FINANCEIRO)):
     try:
-        cobranca.registrar_evento(db, hoje_na_empresa(), empresa, dados, usuario.username)
+        evento_id = cobranca.registrar_evento(db, hoje_na_empresa(), empresa, dados, usuario.username)
         db.commit()
     except cobranca.ErroDeCobranca as erro:
         db.rollback()
         raise HTTPException(erro.status_code, str(erro))
-    return _detalhe_ou_404(db, empresa)
+    return DetalheComEventoNovo(**_detalhe_ou_404(db, empresa).model_dump(), evento_id=evento_id)
 
 
 @router.put("/empresas/{empresa}/observacao", response_model=consultas.DetalheDaEmpresa)
@@ -149,3 +160,63 @@ def gravar_observacao(empresa: str, dados: TextoDaObservacao, db: Session = Depe
         db.rollback()
         raise HTTPException(erro.status_code, str(erro))
     return _detalhe_ou_404(db, empresa)
+
+
+# ─────────────────────────────────────────────────────────────── anexos
+
+class AnexoCriado(BaseModel):
+    id: int
+    nome_original: str
+    tipo: str
+    tamanho: int
+    enviado_por: str
+    enviado_em: datetime
+
+
+@router.post("/eventos/{evento_id}/anexos", response_model=List[AnexoCriado])
+def enviar_anexos(evento_id: int, arquivos: List[UploadFile] = File(...),
+                  db: Session = Depends(get_db), usuario: Usuario = Depends(FINANCEIRO)):
+    recebidos = [anexos.ArquivoRecebido(nome=a.filename or "", conteudo=a.file) for a in arquivos]
+    gravados: List[str] = []
+    try:
+        criados, gravados = anexos.enviar(db, evento_id, recebidos, usuario.username)
+        db.commit()
+    except cobranca.ErroDeCobranca as erro:
+        db.rollback()
+        raise HTTPException(erro.status_code, str(erro))
+    except BaseException:
+        # o commit falhou depois de os arquivos estarem no disco: sem linha, sem arquivo
+        db.rollback()
+        anexos.remover_arquivos(gravados)
+        raise
+    return criados
+
+
+@router.get("/anexos/{anexo_id}")
+def baixar_anexo(anexo_id: int, db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
+    try:
+        arquivo, linha = anexos.anexo_para_baixar(db, anexo_id)
+    except cobranca.ErroDeCobranca as erro:
+        raise HTTPException(erro.status_code, str(erro))
+    # inline para a imagem e o PDF abrirem no navegador; nosniff para ele não "adivinhar" outro tipo
+    return FileResponse(arquivo, media_type=linha["tipo"], headers={
+        "Content-Disposition": "inline; filename*=UTF-8''" + quote(linha["nome_original"], safe=""),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+    })
+
+
+@router.delete("/anexos/{anexo_id}", status_code=204)
+def apagar_anexo(anexo_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(FINANCEIRO)):
+    try:
+        caminho = anexos.apagar(db, anexo_id, usuario.username)
+        db.commit()
+    except cobranca.ErroDeCobranca as erro:
+        db.rollback()
+        raise HTTPException(erro.status_code, str(erro))
+    # Depois do commit: se ele falhasse com o arquivo já apagado, o anexo ficaria quebrado.
+    try:
+        anexos.remover_arquivos([caminho])
+    except OSError:
+        log.exception("Anexo %s marcado como apagado, mas o arquivo ficou no disco.", anexo_id)
+    return Response(status_code=204)

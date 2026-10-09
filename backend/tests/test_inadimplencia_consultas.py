@@ -21,6 +21,7 @@ def tabelas_de_cobranca(engine):
             "CREATE TABLE IF NOT EXISTS tiny.configuracoes ("
             " id serial PRIMARY KEY, chave varchar NOT NULL UNIQUE, valor varchar NOT NULL)"))
     rodar_migracao(engine, "013_cobranca.sql")
+    rodar_migracao(engine, "014_cobranca_anexos.sql")
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE tiny.cobranca_eventos, tiny.cobranca_ciclos, tiny.cobranca_empresas RESTART IDENTITY CASCADE"))
 

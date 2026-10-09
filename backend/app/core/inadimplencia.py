@@ -467,6 +467,15 @@ class Ciclo(BaseModel):
     ultimo_contato_em: Optional[datetime]
 
 
+class AnexoDoEvento(BaseModel):
+    id: int
+    nome_original: str
+    tipo: str
+    tamanho: int
+    enviado_por: str
+    enviado_em: datetime
+
+
 class Evento(BaseModel):
     id: int
     ciclo_id: int
@@ -483,6 +492,7 @@ class Evento(BaseModel):
     promessa_condicoes: Optional[str]
     anotacao: Optional[str]
     valor_inadimplente: Optional[float]
+    anexos: List[AnexoDoEvento] = []
 
 
 class DetalheDaEmpresa(BaseModel):
@@ -550,6 +560,20 @@ def detalhe_da_empresa(db: Session, hoje: date, empresa: str) -> Optional[Detalh
         WHERE c.empresa = :empresa
         ORDER BY ev.ocorrido_em DESC, ev.id DESC
     """), p).mappings()]
+    # Os anexos de todos os eventos numa consulta só; apagado não aparece.
+    anexos: dict = {}
+    for a in db.execute(text("""
+        SELECT a.evento_id, a.id, a.nome_original, a.tipo, a.tamanho, a.enviado_por, a.enviado_em
+        FROM tiny.cobranca_anexos a
+        JOIN tiny.cobranca_eventos ev ON ev.id = a.evento_id
+        JOIN tiny.cobranca_ciclos c ON c.id = ev.ciclo_id
+        WHERE c.empresa = :empresa AND a.apagado_em IS NULL
+        ORDER BY a.enviado_em, a.id
+    """), p).mappings():
+        dados = dict(a)
+        anexos.setdefault(dados.pop("evento_id"), []).append(AnexoDoEvento(**dados))
+    for e in eventos:
+        e.anexos = anexos.get(e.id, [])
 
     v = valores or {"nome": "", "filiais": 0, "cnpj_unico": None, "valor_vencido": 0,
                     "valor_inadimplente": 0, "maior_atraso": 0}

@@ -18,6 +18,7 @@ def tabelas(engine):
             "CREATE TABLE IF NOT EXISTS tiny.configuracoes ("
             " id serial PRIMARY KEY, chave varchar NOT NULL UNIQUE, valor varchar NOT NULL)"))
     rodar_migracao(engine, "013_cobranca.sql")
+    rodar_migracao(engine, "014_cobranca_anexos.sql")
 
 
 @pytest.fixture

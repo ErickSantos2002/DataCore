@@ -59,14 +59,16 @@ class NovoEvento(BaseModel):
         return v.strip() or None
 
 
-def _evento(db, ciclo_id, *, por, tipo, ocorrido_em=None, valor=None, **campos):
-    db.execute(text("""
+def _evento(db, ciclo_id, *, por, tipo, ocorrido_em=None, valor=None, **campos) -> int:
+    """Grava o evento e devolve o id dele (a tela precisa do id para mandar os anexos)."""
+    return db.execute(text("""
         INSERT INTO tiny.cobranca_eventos
             (ciclo_id, ocorrido_em, registrado_por, tipo, canal, filial_cnpj, status_anterior,
              status_novo, promessa_data, promessa_valor, promessa_condicoes, anotacao,
              valor_inadimplente)
         VALUES (:ciclo, :quando, :por, :tipo, :canal, :filial, :antes, :novo, :pd, :pv, :pc,
                 :anotacao, :valor)
+        RETURNING id
     """), {
         "ciclo": ciclo_id, "quando": ocorrido_em or datetime.now(timezone.utc), "por": por,
         "tipo": tipo, "canal": campos.get("canal"), "filial": campos.get("filial_cnpj"),
@@ -74,7 +76,7 @@ def _evento(db, ciclo_id, *, por, tipo, ocorrido_em=None, valor=None, **campos):
         "pd": campos.get("promessa_data"), "pv": campos.get("promessa_valor"),
         "pc": campos.get("promessa_condicoes"), "anotacao": campos.get("anotacao"),
         "valor": valor,
-    })
+    }).scalar_one()
 
 
 def _ciclo_aberto(db, empresa):
@@ -149,7 +151,8 @@ def sincronizar(db: Session, hoje: date) -> dict:
     return contagem
 
 
-def registrar_evento(db: Session, hoje: date, empresa: str, dados: NovoEvento, usuario: str) -> None:
+def registrar_evento(db: Session, hoje: date, empresa: str, dados: NovoEvento, usuario: str) -> int:
+    """Grava o contato (ou a troca de status) e devolve o id do evento criado."""
     ciclo = _ciclo_aberto(db, empresa)
     valores = valores_da_empresa(db, hoje, empresa)
     if valores is None and ciclo is None:
@@ -213,14 +216,14 @@ def registrar_evento(db: Session, hoje: date, empresa: str, dados: NovoEvento, u
         "pv": promessa.valor if promessa else (ciclo["promessa_valor"] if manter_promessa else None),
         "pc": promessa.condicoes if promessa else (ciclo["promessa_condicoes"] if manter_promessa else None),
     })
-    _evento(db, id_ciclo, por=usuario, tipo="contato" if dados.canal else "status",
-            ocorrido_em=dados.ocorrido_em, canal=dados.canal, filial_cnpj=filial,
-            status_anterior=anterior if novo else None, status_novo=novo,
-            promessa_data=promessa.data if promessa else None,
-            promessa_valor=promessa.valor if promessa else None,
-            promessa_condicoes=promessa.condicoes if promessa else None,
-            anotacao=dados.anotacao,
-            valor=(valores or {}).get("valor_inadimplente"))
+    return _evento(db, id_ciclo, por=usuario, tipo="contato" if dados.canal else "status",
+                   ocorrido_em=dados.ocorrido_em, canal=dados.canal, filial_cnpj=filial,
+                   status_anterior=anterior if novo else None, status_novo=novo,
+                   promessa_data=promessa.data if promessa else None,
+                   promessa_valor=promessa.valor if promessa else None,
+                   promessa_condicoes=promessa.condicoes if promessa else None,
+                   anotacao=dados.anotacao,
+                   valor=(valores or {}).get("valor_inadimplente"))
 
 
 def gravar_observacao(db: Session, empresa: str, texto: str, usuario: str) -> None:

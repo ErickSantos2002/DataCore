@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     NFSE_CERT_BASE64: Optional[str] = None
     NFSE_KEY_BASE64: Optional[str] = None
 
+    # Volume do EasyPanel montado na API: anexos da cobrança e o que mais vier a ser
+    # arquivo enviado pela tela. Nos testes, o tmp_path de cada teste.
+    ARQUIVOS_DIR: str = "/app/arquivos"
+
     NFSE_CNPJ: str = "08857492000148"
     NFSE_INSCRICAO_MUNICIPAL: str = "3694208"
 

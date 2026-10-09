@@ -16,6 +16,7 @@ def tabelas(engine):
             " id serial PRIMARY KEY, chave varchar NOT NULL UNIQUE, valor varchar NOT NULL)"))
         conn.execute(text("GRANT SELECT, UPDATE, INSERT ON tiny.configuracoes TO app_teste"))
     rodar_migracao(engine, "013_cobranca.sql")
+    rodar_migracao(engine, "014_cobranca_anexos.sql")
 
 
 @pytest.fixture(autouse=True)

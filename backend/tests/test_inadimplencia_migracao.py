@@ -24,7 +24,7 @@ def rodar_migracao(engine, arquivo):
 @pytest.fixture(scope="module", autouse=True)
 def base(engine):
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS tiny.cobranca_eventos, tiny.cobranca_ciclos, tiny.cobranca_empresas"))
+        conn.execute(text("DROP TABLE IF EXISTS tiny.cobranca_anexos, tiny.cobranca_eventos, tiny.cobranca_ciclos, tiny.cobranca_empresas"))
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS tiny.configuracoes ("
             " id serial PRIMARY KEY, chave varchar NOT NULL UNIQUE, valor varchar NOT NULL)"

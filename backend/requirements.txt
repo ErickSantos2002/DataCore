@@ -1,4 +1,5 @@
 fastapi
+python-multipart==0.0.32  # UploadFile dos anexos da cobrança; sem ele o FastAPI recusa rota com File()
 uvicorn[standard]
 sqlalchemy>=2.0,<2.1  # a 2.1 troca o driver padrão de postgresql:// para o psycopg 3, que a imagem não tem
 psycopg2-binary
