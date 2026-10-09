@@ -136,11 +136,12 @@ SELECT
     count(*) FILTER (WHERE atraso > 0)                                       AS titulos_vencidos,
     count(*) FILTER (WHERE atraso > CAST(:carencia AS int))                  AS titulos_inadimplentes,
     count(DISTINCT empresa) FILTER (WHERE atraso > CAST(:carencia AS int))   AS empresas_inadimplentes,
-    -- a safra inteira: o que passou de 30 dias sem pagar, na história
+    -- a safra inteira: o que passou de 30 dias (estritamente) sem pagar, na história;
+    -- pago no dia 30 ainda é em dia, e 30 dias de atraso ainda é atraso, como nas faixas
     COALESCE(sum(CASE WHEN em_aberto THEN saldo
                       WHEN liquidacao > vencimento + CAST(:carencia AS int) THEN valor
                       ELSE 0 END)
-             FILTER (WHERE vencimento + CAST(:carencia AS int) <= CAST(:hoje AS date)), 0)
+             FILTER (WHERE vencimento + CAST(:carencia AS int) < CAST(:hoje AS date)), 0)
                                                                               AS safra_inadimplente
 FROM t
 """
@@ -260,7 +261,9 @@ def pagina_de_empresas(db: Session, hoje: date, *, busca: Optional[str], status:
     p = {**params_base(hoje), "busca": (busca or "").strip() or None, "status": status or None,
          "faixa_lo": lo, "faixa_hi": hi, "incluir_atraso": incluir_atraso}
     total = db.execute(text(SQL_BASE + SQL_LISTA + "SELECT count(*) FROM lista"), p).scalar_one()
-    ordem = ORDENACOES_DE_EMPRESAS[ordenar_por].format(d=direcao.upper())
+    # `direcao` entra no ORDER BY, que não aceita bind param: só ASC ou DESC chegam ao SQL.
+    d = "DESC" if str(direcao).lower() == "desc" else "ASC"
+    ordem = ORDENACOES_DE_EMPRESAS[ordenar_por].format(d=d)
     linhas = db.execute(
         text(SQL_BASE + SQL_LISTA + f"SELECT * FROM lista ORDER BY {ordem} LIMIT :limite OFFSET :offset"),
         {**p, "limite": limite, "offset": offset},
@@ -450,7 +453,7 @@ SQL_MADUROS = """
                 WHEN liquidacao > vencimento + CAST(:carencia AS int) THEN valor
                 ELSE 0 END AS inad
     FROM t
-    WHERE vencimento + CAST(:carencia AS int) <= CAST(:hoje AS date)
+    WHERE vencimento + CAST(:carencia AS int) < CAST(:hoje AS date)
 )
 """
 _SOMAS = ("COALESCE(sum(valor), 0) AS valor, COALESCE(sum(inad), 0) AS inadimplente,"
@@ -479,7 +482,7 @@ def indicadores(db: Session, hoje: date) -> Indicadores:
     for l in db.execute(text(SQL_BASE + SQL_MADUROS + f"""
         SELECT to_char(vencimento, 'YYYY-MM') AS mes,
                (date_trunc('month', vencimento) + interval '1 month' - interval '1 day'
-                + CAST(:carencia AS int) * interval '1 day') > CAST(:hoje AS date) AS em_apuracao,
+                + CAST(:carencia AS int) * interval '1 day') >= CAST(:hoje AS date) AS em_apuracao,
                {_SOMAS}
         FROM maduros WHERE vencimento >= CAST(:inicio_serie AS date)
         GROUP BY 1, 2 ORDER BY 1

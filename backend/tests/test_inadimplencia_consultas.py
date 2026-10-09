@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
@@ -149,17 +149,43 @@ def test_titulo_ainda_nao_maduro_fica_fora_da_safra(db, contas):
 def test_mes_em_apuracao_nao_entra_no_ultimo_fechado_nem_na_media(db, contas):
     from app.core.inadimplencia import indicadores
 
-    # um título maduro no mês passado: o mês passado só fecha 30 dias depois do fim dele
-    inicio_mes = HOJE.replace(day=1)
-    fim_mes_passado = inicio_mes - timedelta(days=1)
-    contas(venceu_ha=(HOJE - fim_mes_passado.replace(day=1)).days, valor=100)
-    contas(venceu_ha=400, valor=100)  # mês velho, fechado
+    fixo = date(2026, 10, 9)
+    contas(hoje=fixo, venceu_ha=31, valor=1000)   # 08/09: maduro, mês de set em apuração
+    contas(hoje=fixo, venceu_ha=55, valor=100)    # 15/08: aberto, mês fechado
+    contas(hoje=fixo, venceu_ha=86, valor=100, pago_dias_depois=5)  # jul, em dia
+    i = indicadores(db, fixo)
+    meses = {m.mes: m for m in i.mensal}
+    assert meses["2026-09"].em_apuracao is True    # 30/09 + 30 = 30/10 >= 09/10
+    assert meses["2026-08"].em_apuracao is False   # 31/08 + 30 = 30/09 < 09/10
+    assert i.ultimo_fechado.mes == "2026-08"
+    # a média dos fechados (jul + ago) deixa setembro de fora: 100 / 200, e não 1100 / 1200
+    assert i.media_12_meses == pytest.approx(0.5)
+
+
+def test_safra_carencia_estrita_no_atraso_e_no_pagamento(db, contas):
+    from app.core.inadimplencia import indicadores
+
+    contas(venceu_ha=30, valor=100)
+    assert indicadores(db, HOJE).total.valor == 0     # 30 dias ainda é atraso
+    contas(venceu_ha=31, valor=200)
     i = indicadores(db, HOJE)
-    passado = [m for m in i.mensal if m.mes == fim_mes_passado.strftime("%Y-%m")]
-    if passado:  # só existe se o título já está maduro
-        assert passado[0].em_apuracao == (fim_mes_passado + timedelta(days=30) > HOJE)
-    assert i.ultimo_fechado is not None
-    assert not i.ultimo_fechado.em_apuracao
+    assert i.total.valor == 200 and i.total.inadimplente == 200
+
+
+def test_pago_exatamente_no_dia_30_e_em_dia(db, contas):
+    from app.core.inadimplencia import indicadores
+
+    contas(venceu_ha=100, valor=100, pago_dias_depois=30)
+    i = indicadores(db, HOJE)
+    assert i.total.valor == 100
+    assert i.total.inadimplente == 0
+
+
+def test_direcao_maliciosa_nao_chega_ao_sql(db, contas):
+    contas(venceu_ha=40)
+    p = _pagina(db, direcao="desc; DROP TABLE tiny.contas_receber")
+    assert p.total == 1
+    assert db.execute(text("SELECT count(*) FROM tiny.contas_receber")).scalar_one() == 1
 
 
 def test_recuperado(db, contas):
@@ -193,3 +219,84 @@ def test_detalhe(db, contas):
     assert d.telefone == "(11) 0000-0000"
     assert d.ciclo is None and d.eventos == []
     assert detalhe_da_empresa(db, HOJE, "99999999") is None
+
+
+# ─────────────────────────────────────────────────────── dados de cobrança
+
+def _ciclo(engine, empresa, status, *, promessa_data=None, encerrado=False, ultimo_contato=None):
+    with engine.begin() as conn:
+        return conn.execute(text(
+            "INSERT INTO tiny.cobranca_ciclos (empresa, status, promessa_data, aberto_por,"
+            " encerrado_em, ultimo_contato_em, aberto_em)"
+            " VALUES (:e, :s, :p, 'tester', :enc, :uc, now() - interval '5 days') RETURNING id"
+        ), {"e": empresa, "s": status, "p": promessa_data,
+            "enc": datetime(2026, 1, 1) if encerrado else None, "uc": ultimo_contato}).scalar_one()
+
+
+def _evento(engine, ciclo_id, ocorrido_em, tipo, anotacao):
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO tiny.cobranca_eventos (ciclo_id, ocorrido_em, registrado_por, tipo, anotacao)"
+            " VALUES (:c, :o, 'tester', :t, :a)"
+        ), {"c": ciclo_id, "o": ocorrido_em, "t": tipo, "a": anotacao})
+
+
+@pytest.fixture
+def limpa_cobranca(engine):
+    def _limpar():
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE tiny.cobranca_eventos, tiny.cobranca_ciclos RESTART IDENTITY CASCADE"))
+    _limpar()
+    yield
+    _limpar()
+
+
+def test_detalhe_mapeia_ciclo_anteriores_e_eventos(limpa_cobranca, db, contas, engine):
+    from app.core.inadimplencia import detalhe_da_empresa
+
+    contas(doc="11111111000111", venceu_ha=40)
+    antigo = _ciclo(engine, "11111111", "pago", encerrado=True)
+    atual = _ciclo(engine, "11111111", "promessa", promessa_data=HOJE + timedelta(days=3))
+    _evento(engine, antigo, datetime(2026, 1, 1, 10), "nota", "primeiro")
+    _evento(engine, atual, datetime(2026, 5, 1, 10), "nota", "segundo")
+    _evento(engine, atual, datetime(2026, 6, 1, 10), "nota", "terceiro")
+    d = detalhe_da_empresa(db, HOJE, "11111111")
+    assert d.ciclo.id == atual and d.ciclo.status == "promessa"
+    assert [c.id for c in d.ciclos_anteriores] == [antigo]
+    assert [e.anotacao for e in d.eventos] == ["terceiro", "segundo", "primeiro"]
+
+
+def test_resumo_conta_a_cobranca(limpa_cobranca, db, contas, engine):
+    from app.core.inadimplencia import resumo
+
+    for doc in ("11111111000111", "22222222000122", "33333333000133", "44444444000144", "55555555000155"):
+        contas(nome="E" + doc[:2], doc=doc, venceu_ha=40)
+    _ciclo(engine, "22222222", "em_contato")
+    _ciclo(engine, "33333333", "promessa", promessa_data=HOJE + timedelta(days=7))
+    _ciclo(engine, "44444444", "promessa", promessa_data=HOJE + timedelta(days=8))
+    _ciclo(engine, "55555555", "quebrada")
+    # 1111...: sem ciclo -> sem_contato; em_contato não conta
+    r = resumo(db, HOJE)
+    assert r.sem_contato == 1
+    assert r.promessas_7_dias == 1
+    assert r.promessas_quebradas == 1
+    assert r.em_negociacao == 0
+    _ciclo(engine, "11111111", "negociacao")
+    r = resumo(db, HOJE)
+    assert r.em_negociacao == 1 and r.sem_contato == 0
+
+
+def test_pagina_traz_o_ciclo_aberto_e_filtra_por_status(limpa_cobranca, db, contas, engine):
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=40, valor=500)
+    contas(nome="Beta", doc="22222222000122", venceu_ha=40, valor=100)
+    promessa = HOJE + timedelta(days=2)
+    contato = datetime(2026, 9, 1, 12)
+    _ciclo(engine, "11111111", "promessa", promessa_data=promessa, ultimo_contato=contato)
+    _ciclo(engine, "11111111", "pago", encerrado=True)
+    p = _pagina(db)
+    alfa = next(e for e in p.itens if e.empresa == "11111111")
+    assert alfa.status == "promessa"
+    assert alfa.proxima_data == promessa
+    assert alfa.ultimo_contato.replace(tzinfo=None) == contato
+    assert [e.empresa for e in _pagina(db, status=["promessa"]).itens] == ["11111111"]
+    assert [e.empresa for e in _pagina(db, status=["sem_contato"]).itens] == ["22222222"]
