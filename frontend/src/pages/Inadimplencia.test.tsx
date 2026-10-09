@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Inadimplencia from "./Inadimplencia";
 import { AuthContext } from "../context/AuthContext";
-import type { EmpresaDaLista, ResumoDeInadimplencia } from "../services/inadimplencia";
+import type { DetalheDaEmpresa, EmpresaDaLista, ResumoDeInadimplencia } from "../services/inadimplencia";
+import type { ContaDaTela } from "../services/notasapi";
 
 const falso = vi.hoisted(() => ({ atual: null as null | ReturnType<typeof import("./inadimplencia/servidorFalso").criarServidorDeInadimplencia> }));
 
@@ -126,5 +127,90 @@ describe("Inadimplência — aba Cobrança", () => {
     falso.atual!.estado.modo = "falha";
     await montar();
     expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar");
+  });
+});
+
+const DETALHE: DetalheDaEmpresa = {
+  empresa: "11111111", nome: "Alfa Ltda", documento: "11.111.111 · 2 filiais", valor_devido: 2000,
+  valor_inadimplente: 1500, maior_atraso: 95, telefone: "(11) 0000-0000", email: "fin@alfa.exemplo",
+  observacao: "Só boleto por e-mail", observacao_por: "ana", observacao_em: "2026-10-01T10:00:00Z",
+  filiais: [
+    { cnpj: "11111111000111", nome: "Alfa Ltda - A", titulos: 1, valor_vencido: 1500 },
+    { cnpj: "11111111000222", nome: "Alfa Ltda - B", titulos: 1, valor_vencido: 500 },
+  ],
+  ciclo: { id: 1, status: "promessa", promessa_data: "2026-10-15", promessa_valor: 1000,
+           promessa_condicoes: "Metade agora", aberto_em: "2026-09-01T00:00:00Z", aberto_por: "sistema",
+           encerrado_em: null, ultimo_contato_em: "2026-10-01T10:00:00Z" },
+  ciclos_anteriores: [],
+  eventos: [
+    { id: 2, ciclo_id: 1, ocorrido_em: "2026-10-01T10:00:00Z", registrado_em: "2026-10-01T10:05:00Z",
+      registrado_por: "ana", tipo: "contato", canal: "telefone", filial_cnpj: "11111111000111",
+      status_anterior: "sem_contato", status_novo: "promessa", promessa_data: "2026-10-15",
+      promessa_valor: 1000, promessa_condicoes: "Metade agora", anotacao: "Falei com a Joana",
+      valor_inadimplente: 1500 },
+    { id: 1, ciclo_id: 1, ocorrido_em: "2026-09-01T00:00:00Z", registrado_em: "2026-09-01T00:00:00Z",
+      registrado_por: "sistema", tipo: "sistema", canal: null, filial_cnpj: null, status_anterior: null,
+      status_novo: "sem_contato", promessa_data: null, promessa_valor: null, promessa_condicoes: null,
+      anotacao: "Cobrança aberta: título com 31 dias de atraso.", valor_inadimplente: 1500 },
+  ],
+};
+
+function titulo(c: Partial<ContaDaTela> & { id: number }): ContaDaTela {
+  return { id_tiny: c.id, emissao: "2026-06-01", vencimento: "2026-07-01", situacao: "aberto",
+           categoria: "Serviços", cliente_nome: "Alfa Ltda - A", cliente_cpf_cnpj: "11.111.111/0001-11",
+           cliente_cidade: null, cliente_uf: null, nro_documento: null, historico: null, liquidacao: null,
+           valor: 1500, saldo: 1500, quitada: false, vencida: true, forma_pagamento: null,
+           portador: null, ocorrencia: null, ...c };
+}
+
+describe("Inadimplência — modal da empresa", () => {
+  beforeEach(() => {
+    falso.atual!.estado.detalhes = { "11111111": DETALHE };
+    falso.atual!.estado.titulos = { "11111111": [
+      titulo({ id: 1 }),
+      titulo({ id: 2, cliente_nome: "Alfa Ltda - B", cliente_cpf_cnpj: "11.111.111/0002-22", saldo: 500, valor: 500 }),
+      titulo({ id: 3, vencimento: "2099-01-01", vencida: false }),
+    ] };
+  });
+
+  async function abrir() {
+    await montar();
+    fireEvent.click(screen.getByRole("button", { name: "Alfa Ltda" }));
+    await assentar(); await assentar();
+    return screen.getByRole("dialog");
+  }
+
+  it("abre com cabeçalho, contato do Tiny e observação", async () => {
+    const modal = await abrir();
+    expect(within(modal).getByText("11.111.111 · 2 filiais")).toBeInTheDocument();
+    expect(within(modal).getByText("(11) 0000-0000")).toBeInTheDocument();
+    expect(within(modal).getByText("Só boleto por e-mail")).toBeInTheDocument();
+  });
+
+  it("aba Títulos agrupa por filial com subtotal e põe os a vencer por último", async () => {
+    const modal = await abrir();
+    const grupos = within(modal).getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(grupos[0]).toMatch(/Alfa Ltda - A/);
+    expect(grupos[grupos.length - 1]).toMatch(/A vencer/);
+    expect(within(modal).getAllByText(/Vencida/).length).toBeGreaterThan(0);
+  });
+
+  it("aba Cobrança mostra a linha do tempo, do mais novo ao mais velho", async () => {
+    const modal = await abrir();
+    fireEvent.click(within(modal).getByRole("tab", { name: "Cobrança" }));
+    const itens = within(modal).getAllByRole("listitem");
+    expect(itens[0]).toHaveTextContent("Falei com a Joana");
+    expect(itens[0]).toHaveTextContent("ana");
+    expect(itens[1]).toHaveTextContent("Sistema");
+  });
+
+  it("editar a observação grava e mostra a nova", async () => {
+    const modal = await abrir();
+    fireEvent.click(within(modal).getByRole("button", { name: "Editar observação" }));
+    fireEvent.change(within(modal).getByLabelText("Observação"), { target: { value: "Pagam dia 10" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Salvar observação" }));
+    await assentar();
+    expect(falso.atual!.estado.observacoes).toEqual([{ empresa: "11111111", texto: "Pagam dia 10" }]);
+    expect(within(modal).getByText("Pagam dia 10")).toBeInTheDocument();
   });
 });

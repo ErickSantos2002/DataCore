@@ -108,7 +108,7 @@ export interface TabelaDeContasProps<C extends ContaBase> {
  * que é estado calculado — já mostravam o texto cru. Uma linha do Tiny com
  * `situacao: "PAGO"` saía "PAGO" numa tela e "Pago" na outra.
  */
-function SeloDeSituacao<C extends ContaBase>({
+export function SeloDeSituacao<C extends ContaBase>({
   conta,
   dialeto,
 }: {
