@@ -7,15 +7,13 @@ import { formatarMoeda } from "../contas/contas";
 import { formatarPercentual, nomeDoMes } from "./inadimplencia";
 import { useIndicadores } from "./useInadimplencia";
 
-/** Compara na precisão exibida (0,1 p.p.); sem taxa dos dois lados, não há comparação. */
+/** Compara na precisão exibida (o que formatarPercentual mostra); sem taxa dos dois lados, não há comparação. */
 export function comparacaoComAnoAnterior(atual: number | null, anterior: number | null, ano: number): string | undefined {
   if (atual === null || anterior === null) return undefined;
-  const a = Math.round(atual * 1000);
-  const b = Math.round(anterior * 1000);
   const rotulo = `${ano} (${formatarPercentual(anterior)})`;
-  if (a > b) return `▲ pior que ${rotulo}`;
-  if (a < b) return `▼ melhor que ${rotulo}`;
-  return `= igual a ${rotulo}`;
+  if (formatarPercentual(atual) === formatarPercentual(anterior)) return `= igual a ${rotulo}`;
+  if (atual > anterior) return `▲ pior que ${rotulo}`;
+  return `▼ melhor que ${rotulo}`;
 }
 
 /** Texto do tooltip do gráfico mensal, com os rótulos da spec. */

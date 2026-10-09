@@ -392,6 +392,8 @@ describe("Inadimplência — aba Indicadores", () => {
     [0.099, 0.084, /▲ pior que 2025 \(8,4%\)/],
     [0.07, 0.084, /▼ melhor que 2025 \(8,4%\)/],
     [0.0991, 0.0994, /igual a 2025 \(9,9%\)/],
+    [0.0295, 0.0285, /igual a 2025 \(2,9%\)/],
+    [0.0045, 0.004, /igual a 2025 \(0,4%\)/],
   ])("compara com o ano anterior (%s vs %s)", async (atual, anterior, esperado) => {
     falso.atual!.estado.indicadores = comAno(atual, anterior);
     await abrirIndicadores();
