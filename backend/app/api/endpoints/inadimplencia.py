@@ -191,8 +191,12 @@ async def _arquivos_do_pedido(request: Request):
         raise HTTPException(413, f"O envio passa do limite de {anexos.MAXIMO_POR_EVENTO} arquivos de 10 MB.")
     try:
         form = await request.form(max_files=anexos.MAXIMO_POR_EVENTO, max_fields=anexos.MAXIMO_POR_EVENTO)
-    except ErroDoStarlette:
-        raise HTTPException(422, f"No máximo {anexos.MAXIMO_POR_EVENTO} anexos por contato.")
+    except ErroDoStarlette as erro:
+        # o Starlette transforma toda falha do multipart em 400 com frase em inglês; só a de
+        # arquivos demais é o limite — o resto (boundary, corpo truncado) é envio quebrado
+        if "Too many files" in str(erro.detail):
+            raise HTTPException(422, f"No máximo {anexos.MAXIMO_POR_EVENTO} anexos por contato.")
+        raise HTTPException(422, "Não foi possível ler os arquivos enviados. Tente de novo.")
     try:
         yield [a for a in form.getlist("arquivos") if isinstance(a, UploadFile)]
     finally:

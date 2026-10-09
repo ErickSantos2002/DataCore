@@ -147,6 +147,8 @@ function AnexarDepois({ eventoId, vagas, onPronto, onMudou, onErro }: {
 export function AnexosDoEvento({ evento, onMudou, onErro }: { evento: Evento } & AcoesDoAnexo) {
   const [anexando, setAnexando] = useState(false);
   const vagas = MAXIMO_POR_CONTATO - evento.anexos.length;
+  // evento automático (abriu, quebrou, pagou) não recebe anexo — o backend também recusa
+  const aceitaAnexo = evento.tipo !== "sistema";
 
   return (
     <div className="mt-2 flex flex-col gap-2">
@@ -157,7 +159,7 @@ export function AnexosDoEvento({ evento, onMudou, onErro }: { evento: Evento } &
       ) : null}
       {anexando ? (
         <AnexarDepois eventoId={evento.id} vagas={vagas} onPronto={() => setAnexando(false)} onMudou={onMudou} onErro={onErro} />
-      ) : vagas > 0 ? (
+      ) : aceitaAnexo && vagas > 0 ? (
         <div>
           <Button variant="ghost" size="sm" icon={<Paperclip size={16} strokeWidth={1.75} />} onClick={() => setAnexando(true)}>
             Anexar

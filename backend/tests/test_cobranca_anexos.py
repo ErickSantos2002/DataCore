@@ -247,6 +247,25 @@ def test_remover_nao_sai_da_pasta_de_arquivos(pasta):
         fora.unlink(missing_ok=True)
 
 
+def test_corpo_malformado_leva_422_generico_e_nao_a_frase_do_limite(client, financeiro, evento):
+    r = client.post(f"/inadimplencia/eventos/{evento}/anexos", content=b"qualquer coisa",
+                    headers={**financeiro.headers, "content-type": "multipart/form-data"})
+    assert r.status_code == 422
+    assert isinstance(r.json()["detail"], str) and "No máximo" not in r.json()["detail"]
+
+
+def test_evento_do_sistema_nao_recebe_anexo(client, financeiro, evento, engine, pasta):
+    with engine.begin() as conn:
+        sistema = conn.execute(text(
+            "INSERT INTO tiny.cobranca_eventos (ciclo_id, ocorrido_em, registrado_por, tipo, anotacao)"
+            " SELECT ciclo_id, now(), 'sistema', 'sistema', 'Cobrança aberta.' FROM tiny.cobranca_eventos"
+            " WHERE id = :id RETURNING id"), {"id": evento}).scalar_one()
+    r = _enviar(client, financeiro.headers, sistema, ("a.png", PNG, "image/png"))
+    assert r.status_code == 422
+    assert "sistema" in r.json()["detail"]
+    assert _linhas(engine) == [] and _arquivos_no_disco(pasta) == []
+
+
 def test_evento_inexistente_404(client, financeiro, evento):
     assert _enviar(client, financeiro.headers, 999999, ("a.png", PNG, "image/png")).status_code == 404
 
@@ -359,7 +378,7 @@ def test_detalhe_busca_os_anexos_numa_consulta_so(client, financeiro, evento, en
     consultas = []
 
     def contar(conn, cursor, statement, *args):
-        if "cobranca_anexos" in statement:
+        if "FROM tiny.cobranca_anexos" in statement:  # a checagem de to_regclass não conta
             consultas.append(statement)
 
     sa_event.listen(engine_do_app, "before_cursor_execute", contar)
@@ -368,3 +387,18 @@ def test_detalhe_busca_os_anexos_numa_consulta_so(client, financeiro, evento, en
     finally:
         sa_event.remove(engine_do_app, "before_cursor_execute", contar)
     assert len(consultas) == 1
+
+
+def test_sem_a_tabela_014_o_detalhe_e_o_registro_seguem_funcionando(client, financeiro, contas, engine):
+    # deploy antes da migração: o modal não pode dar 500, e o registro não pode gravar e responder 500
+    contas(venceu_ha=40)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE tiny.cobranca_anexos RENAME TO cobranca_anexos_fora"))
+    try:
+        r = client.post("/inadimplencia/empresas/11111111/eventos", json=_contato(), headers=financeiro.headers)
+        assert r.status_code == 200, r.text
+        assert all(e["anexos"] == [] for e in r.json()["eventos"])
+        assert client.get("/inadimplencia/empresas/11111111", headers=financeiro.headers).status_code == 200
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tiny.cobranca_anexos_fora RENAME TO cobranca_anexos"))

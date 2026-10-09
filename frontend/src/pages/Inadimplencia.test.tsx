@@ -714,13 +714,28 @@ describe("Inadimplência — modal da empresa", () => {
       const cinco = [1, 2, 3, 4, 5].map((i) => anexo(i, `f${i}.png`, "image/png"));
       falso.atual!.estado.detalhes = { "11111111": comAnexos(cinco) };
       let modal = await abrirCobranca();
-      expect(within(modal).getAllByRole("button", { name: "Anexar" })).toHaveLength(1); // só o outro evento
+      expect(within(modal).queryAllByRole("button", { name: "Anexar" })).toHaveLength(0);
       cleanup();
       falso.atual!.estado.detalhes = { "11111111": comAnexos(cinco.slice(0, 4)) };
       modal = await abrirCobranca();
       fireEvent.click(within(modal).getAllByRole("button", { name: "Anexar" })[0]);
       fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [png(), pdf()] } });
       expect(within(modal).getByText(/Este contato só aceita mais 1 anexo\./)).toBeInTheDocument();
+    });
+
+    it("Anexar só nos eventos de contato, não nos do sistema", async () => {
+      const modal = await abrirCobranca();
+      const botoes = within(modal).getAllByRole("button", { name: "Anexar" });
+      expect(botoes).toHaveLength(1);
+      expect(botoes[0].closest("li")).toHaveTextContent("Falei com a Joana");
+    });
+
+    it("arquivo sem tipo informado passa pela extensão (o servidor confere o conteúdo)", async () => {
+      const modal = await formulario();
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [
+        new File(["j"], "foto.JPG", { type: "" }), new File(["t"], "nota.txt", { type: "" })] } });
+      expect(within(modal).getByRole("img", { name: "foto.JPG" })).toBeInTheDocument();
+      expect(within(modal).getByText(/nota\.txt não é JPG, PNG, WebP nem PDF\./)).toBeInTheDocument();
     });
 
     it("fechar o modal revoga as URLs criadas", async () => {

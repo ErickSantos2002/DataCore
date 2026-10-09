@@ -560,9 +560,12 @@ def detalhe_da_empresa(db: Session, hoje: date, empresa: str) -> Optional[Detalh
         WHERE c.empresa = :empresa
         ORDER BY ev.ocorrido_em DESC, ev.id DESC
     """), p).mappings()]
-    # Os anexos de todos os eventos numa consulta só; apagado não aparece.
+    # Os anexos de todos os eventos numa consulta só; apagado não aparece. Sem a tabela (backend
+    # implantado antes da migração 014), segue sem anexos: senão o modal dava 500 e o registro de
+    # contato gravava e respondia 500 — e a pessoa gravava de novo, em dobro.
     anexos: dict = {}
-    for a in db.execute(text("""
+    tem_anexos = db.execute(text("SELECT to_regclass('tiny.cobranca_anexos') IS NOT NULL")).scalar()
+    for a in [] if not tem_anexos else db.execute(text("""
         SELECT a.evento_id, a.id, a.nome_original, a.tipo, a.tamanho, a.enviado_por, a.enviado_em
         FROM tiny.cobranca_anexos a
         JOIN tiny.cobranca_eventos ev ON ev.id = a.evento_id

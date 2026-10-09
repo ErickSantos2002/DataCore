@@ -2,7 +2,7 @@ import { useCallback, useId, useRef } from "react";
 import { FileText, Paperclip, X } from "lucide-react";
 
 import { Button } from "../../design-system/ui";
-import { ACEITAR, ehImagem } from "./anexos";
+import { ACEITAR, ehImagem, tipoDoArquivo } from "./anexos";
 import type { AnexosEscolhidos } from "./useAnexos";
 
 const FOCO = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
@@ -16,7 +16,7 @@ function Previa({ arquivo }: { arquivo: File }) {
     return () => URL.revokeObjectURL(url);
   }, [arquivo]);
 
-  if (ehImagem(arquivo.type)) {
+  if (ehImagem(tipoDoArquivo(arquivo))) {
     return <img ref={comUrl} alt={arquivo.name} className="h-16 w-16 rounded object-cover" />;
   }
   return (

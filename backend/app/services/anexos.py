@@ -142,8 +142,13 @@ def enviar(db: Session, evento_id: int, arquivos: Sequence[ArquivoRecebido], usu
         raise ErroDeCobranca("Escolha ao menos um arquivo.")
     if len(arquivos) > MAXIMO_POR_EVENTO:
         raise ErroDeCobranca(f"No máximo {MAXIMO_POR_EVENTO} anexos por contato.")
-    if db.execute(text("SELECT 1 FROM tiny.cobranca_eventos WHERE id = :id"), {"id": evento_id}).first() is None:
+    tipo_do_evento = db.execute(text("SELECT tipo FROM tiny.cobranca_eventos WHERE id = :id"),
+                                {"id": evento_id}).scalar_one_or_none()
+    if tipo_do_evento is None:
         raise ErroDeCobranca("Evento não encontrado.", 404)
+    if tipo_do_evento == "sistema":
+        # evento automático (abriu, quebrou, pagou): comprovante preso nele some da vista
+        raise ErroDeCobranca("Evento do sistema não recebe anexo. Anexe no registro de contato.")
     # Dois envios ao mesmo tempo no mesmo evento passariam juntos pela contagem: a trava vale
     # até o fim da transação. Sem FOR UPDATE no evento, que só tem SELECT e INSERT.
     db.execute(text("SELECT pg_advisory_xact_lock(hashtext('cobranca_anexos'), CAST(:id AS int))"),
