@@ -3,8 +3,13 @@ import { useState } from "react";
 import { Button, Input, Select, Textarea } from "../../design-system/ui";
 import { diaLocal } from "../../lib/datas";
 import { converterParaNumero } from "../../lib/dinheiro";
-import { registrarEvento, type CodigoDeStatus, type DetalheDaEmpresa } from "../../services/inadimplencia";
+import {
+  enviarAnexos, fetchDetalhe, registrarEvento, type CodigoDeStatus, type DetalheComEventoNovo, type DetalheDaEmpresa,
+} from "../../services/inadimplencia";
+import { MAXIMO_POR_CONTATO } from "./anexos";
+import { CampoDeAnexos } from "./CampoDeAnexos";
 import { CANAIS, STATUS, STATUS_MANUAIS, mensagemDeErro } from "./inadimplencia";
+import { useAnexosEscolhidos } from "./useAnexos";
 
 const doisDigitos = (n: number) => String(n).padStart(2, "0");
 
@@ -40,6 +45,7 @@ export function FormularioDeContato({ detalhe, onGravou, onErro, onCancelar }: {
   const [anotacao, setAnotacao] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const [gravando, setGravando] = useState(false);
+  const anexos = useAnexosEscolhidos(MAXIMO_POR_CONTATO);
 
   const gravar = async () => {
     if (!canal && !status) { setAviso("Escolha o canal do contato ou um novo status."); return; }
@@ -51,25 +57,44 @@ export function FormularioDeContato({ detalhe, onGravou, onErro, onCancelar }: {
     setAviso(null);
     setGravando(true);
     try {
-      onGravou(await registrarEvento(detalhe.empresa, {
-        ocorrido_em: comFusoLocal(instante),
-        canal: canal || null,
-        filial_cnpj: filial || null,
-        status_novo: status || null,
-        promessa: status === "promessa"
-          ? { data, valor: valor.trim() ? numero : null, condicoes: condicoes.trim() || null }
-          : null,
-        anotacao: anotacao.trim() || null,
-      }));
-    } catch (falha) {
-      onErro(mensagemDeErro(falha));
+      let novo: DetalheComEventoNovo;
+      try {
+        novo = await registrarEvento(detalhe.empresa, {
+          ocorrido_em: comFusoLocal(instante),
+          canal: canal || null,
+          filial_cnpj: filial || null,
+          status_novo: status || null,
+          promessa: status === "promessa"
+            ? { data, valor: valor.trim() ? numero : null, condicoes: condicoes.trim() || null }
+            : null,
+          anotacao: anotacao.trim() || null,
+        });
+      } catch (falha) {
+        onErro(mensagemDeErro(falha));
+        return;
+      }
+      if (anexos.arquivos.length === 0) { onGravou(novo); return; }
+      // Os anexos vão DEPOIS, com o id do evento novo. Se falharem, o contato já está salvo:
+      // fecha o formulário e diz como anexar de novo, em vez de deixar a pessoa gravar duas vezes.
+      try {
+        await enviarAnexos(novo.evento_id, anexos.arquivos);
+      } catch (falha) {
+        onGravou(novo);
+        onErro(`O contato foi salvo, mas os anexos não: ${mensagemDeErro(falha)} Use "Anexar" no contato para tentar de novo.`);
+        return;
+      }
+      try {
+        onGravou(await fetchDetalhe(detalhe.empresa));
+      } catch {
+        onGravou(novo); // os anexos aparecem na próxima abertura
+      }
     } finally {
       setGravando(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-borda p-4">
+    <div className="flex flex-col gap-4 rounded-lg border border-borda p-4" onPaste={anexos.aoColar}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Input label="Quando" type="datetime-local" value={quando} onChange={(e) => setQuando(e.target.value)} />
         <Select label="Canal" placeholder="—" value={canal} onChange={(e) => setCanal(e.target.value)} options={CANAIS} />
@@ -88,6 +113,7 @@ export function FormularioDeContato({ detalhe, onGravou, onErro, onCancelar }: {
       ) : null}
       <Textarea label="Anotação" rows={3} maxLength={4000} value={anotacao} onChange={(e) => setAnotacao(e.target.value)}
         placeholder="Com quem falou, o que ficou combinado..." />
+      <CampoDeAnexos escolhidos={anexos} />
       {aviso ? <p className="text-sm text-danger">{aviso}</p> : null}
       <div className="flex gap-2">
         <Button onClick={gravar} disabled={gravando}>Gravar</Button>

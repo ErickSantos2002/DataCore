@@ -67,7 +67,8 @@ function CorpoDoModal({ empresa, onFechar, onGravou }: Props) {
               {titulos.dado ? <TitulosDaEmpresa titulos={titulos.dado} hoje={hoje} /> : <Spinner />}
             </TabsContent>
             <TabsContent value="cobranca" className="mt-4 flex flex-col gap-6">
-              <LinhaDoTempo eventos={d.eventos} ciclo={d.ciclo} anteriores={d.ciclos_anteriores} />
+              <LinhaDoTempo empresa={d.empresa} eventos={d.eventos} ciclo={d.ciclo} anteriores={d.ciclos_anteriores}
+                onMudou={gravou} onErro={setErro} />
             </TabsContent>
           </Tabs>
         </div>

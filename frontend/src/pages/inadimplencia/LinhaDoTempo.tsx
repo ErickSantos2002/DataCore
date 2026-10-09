@@ -1,7 +1,8 @@
 import { Badge } from "../../design-system/ui";
 import { dataDeCalendario } from "../../lib/datas";
-import type { Ciclo, Evento } from "../../services/inadimplencia";
+import { fetchDetalhe, type Ciclo, type DetalheDaEmpresa, type Evento } from "../../services/inadimplencia";
 import { formatarMoeda } from "../contas/contas";
+import { AnexosDoEvento, type AcoesDoAnexo } from "./AnexosDoEvento";
 import { CANAIS, STATUS } from "./inadimplencia";
 
 const CANAL = Object.fromEntries(CANAIS.map((c) => [c.value, c.label]));
@@ -14,7 +15,7 @@ function hora(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
-function ItemDaLinha({ e }: { e: Evento }) {
+function ItemDaLinha({ e, acoes }: { e: Evento; acoes: AcoesDoAnexo }) {
   const quem = e.registrado_por === "sistema" ? "Sistema" : e.registrado_por;
   return (
     <li className="border-l-2 border-borda pl-4">
@@ -32,16 +33,36 @@ function ItemDaLinha({ e }: { e: Evento }) {
       ) : null}
       {e.promessa_condicoes ? <p className="mt-1 text-sm italic">{e.promessa_condicoes}</p> : null}
       {e.anotacao ? <p className="mt-1 whitespace-pre-wrap text-sm">{e.anotacao}</p> : null}
+      <AnexosDoEvento evento={e} {...acoes} />
     </li>
   );
 }
 
-export function LinhaDoTempo({ eventos, ciclo, anteriores }: { eventos: Evento[]; ciclo: Ciclo | null; anteriores: Ciclo[] }) {
+export function LinhaDoTempo({ empresa, eventos, ciclo, anteriores, onMudou, onErro }: {
+  empresa: string;
+  eventos: Evento[];
+  ciclo: Ciclo | null;
+  anteriores: Ciclo[];
+  /** O detalhe recarregado depois de anexar ou apagar anexo. */
+  onMudou: (novo: DetalheDaEmpresa) => void;
+  onErro: (mensagem: string) => void;
+}) {
   const doAberto = eventos.filter((e) => e.ciclo_id === ciclo?.id);
+  const acoes: AcoesDoAnexo = {
+    onErro,
+    onMudou: async () => {
+      try {
+        onMudou(await fetchDetalhe(empresa));
+      } catch (falha) {
+        console.error("Não foi possível recarregar a empresa.", falha);
+        onErro("Não foi possível recarregar a empresa.");
+      }
+    },
+  };
   return (
     <div className="flex flex-col gap-6">
       {doAberto.length === 0 ? <p className="text-conteudo-muted">Nenhum registro de cobrança ainda.</p> : (
-        <ul className="flex flex-col gap-4">{doAberto.map((e) => <ItemDaLinha key={e.id} e={e} />)}</ul>
+        <ul className="flex flex-col gap-4">{doAberto.map((e) => <ItemDaLinha key={e.id} e={e} acoes={acoes} />)}</ul>
       )}
       {anteriores.map((c) => (
         <details key={c.id} className="rounded-lg border border-borda p-3">
@@ -49,7 +70,7 @@ export function LinhaDoTempo({ eventos, ciclo, anteriores }: { eventos: Evento[]
             Cobrança de {dataLocal(c.aberto_em)} a {c.encerrado_em ? dataLocal(c.encerrado_em) : "—"} · {STATUS[c.status].rotulo}
           </summary>
           <ul className="mt-3 flex flex-col gap-4">
-            {eventos.filter((e) => e.ciclo_id === c.id).map((e) => <ItemDaLinha key={e.id} e={e} />)}
+            {eventos.filter((e) => e.ciclo_id === c.id).map((e) => <ItemDaLinha key={e.id} e={e} acoes={acoes} />)}
           </ul>
         </details>
       ))}

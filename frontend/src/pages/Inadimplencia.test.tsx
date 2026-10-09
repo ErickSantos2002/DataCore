@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Inadimplencia from "./Inadimplencia";
@@ -90,7 +90,8 @@ async function montar() {
 beforeEach(() => {
   const e = falso.atual!.estado;
   Object.assign(e, { modo: "ok", resumo: RESUMO, empresas: EMPRESAS, pedidos: [], eventos: [],
-                     observacoes: [], erroDeGravacao: null, pedidosResumo: [], pedidosIndicadores: [] });
+                     observacoes: [], erroDeGravacao: null, pedidosResumo: [], pedidosIndicadores: [],
+                     anexosEnviados: [], anexosApagados: [], anexosBaixados: [], erroDeAnexo: null });
 });
 
 describe("Inadimplência — aba Cobrança", () => {
@@ -340,11 +341,12 @@ const DETALHE: DetalheDaEmpresa = {
       registrado_por: "ana", tipo: "contato", canal: "telefone", filial_cnpj: "11111111000111",
       status_anterior: "sem_contato", status_novo: "promessa", promessa_data: "2026-10-15",
       promessa_valor: 1000, promessa_condicoes: "Metade agora", anotacao: "Falei com a Joana",
-      valor_inadimplente: 1500 },
+      valor_inadimplente: 1500, anexos: [] },
     { id: 1, ciclo_id: 1, ocorrido_em: "2026-09-01T00:00:00Z", registrado_em: "2026-09-01T00:00:00Z",
       registrado_por: "sistema", tipo: "sistema", canal: null, filial_cnpj: null, status_anterior: null,
       status_novo: "sem_contato", promessa_data: null, promessa_valor: null, promessa_condicoes: null,
-      anotacao: "Cobrança aberta: título com 31 dias de atraso.", valor_inadimplente: 1500 },
+      anotacao: "Cobrança aberta: título com 31 dias de atraso.", valor_inadimplente: 1500,
+      anexos: [] },
   ],
 };
 
@@ -533,6 +535,201 @@ describe("Inadimplência — modal da empresa", () => {
     const enviado = falso.atual!.estado.eventos[0].dados.ocorrido_em;
     expect(enviado).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
     expect(new Date(enviado).getTime()).toBe(new Date(2026, 9, 9, 14, 30).getTime());
+  });
+
+  describe("anexos", () => {
+    const png = () => new File(["png"], "print.png", { type: "image/png" });
+    const pdf = () => new File(["pdf"], "boleto.pdf", { type: "application/pdf" });
+    const criados: string[] = [];
+    const revogados: string[] = [];
+
+    beforeEach(() => {
+      criados.length = 0;
+      revogados.length = 0;
+      // jsdom não tem URL.createObjectURL
+      vi.stubGlobal("URL", Object.assign(URL, {
+        createObjectURL: vi.fn(() => { const u = `blob:falso/${criados.length + 1}`; criados.push(u); return u; }),
+        revokeObjectURL: vi.fn((u: string) => { revogados.push(u); }),
+      }));
+    });
+    afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+    function anexo(id: number, nome: string, tipo: "image/png" | "application/pdf") {
+      return { id, nome_original: nome, tipo, tamanho: 10, enviado_por: "ana", enviado_em: "2026-10-01T10:06:00Z" };
+    }
+
+    function comAnexos(anexos: ReturnType<typeof anexo>[]): DetalheDaEmpresa {
+      return { ...DETALHE, eventos: [{ ...DETALHE.eventos[0], anexos }, DETALHE.eventos[1]] };
+    }
+
+    async function abrirCobranca() {
+      const modal = await abrir();
+      fireEvent.click(within(modal).getByRole("tab", { name: "Cobrança" }));
+      await assentar(); await assentar();
+      return modal;
+    }
+
+    it("escolher arquivo mostra a miniatura e envia depois do evento, com o id dele", async () => {
+      const modal = await formulario();
+      fireEvent.change(within(modal).getByLabelText("Canal"), { target: { value: "telefone" } });
+      const arquivo = png();
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [arquivo] } });
+      expect(within(modal).getByRole("img", { name: "print.png" })).toHaveAttribute("src", "blob:falso/1");
+      fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+      await assentar(); await assentar(); await assentar();
+      expect(falso.atual!.estado.eventos).toHaveLength(1);
+      expect(falso.atual!.estado.anexosEnviados).toEqual([{ eventoId: 99, arquivos: [arquivo] }]);
+    });
+
+    it("sem anexo, não chama o envio de anexos", async () => {
+      const modal = await formulario();
+      fireEvent.change(within(modal).getByLabelText("Canal"), { target: { value: "telefone" } });
+      fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+      await assentar(); await assentar();
+      expect(falso.atual!.estado.anexosEnviados).toEqual([]);
+    });
+
+    it("colar um print (Ctrl+V) no formulário entra na lista", async () => {
+      const modal = await formulario();
+      fireEvent.paste(within(modal).getByLabelText("Anotação"), { clipboardData: { files: [png()] } });
+      expect(within(modal).getByRole("img", { name: "print.png" })).toBeInTheDocument();
+    });
+
+    it("arrastar e soltar entra na lista; PDF aparece com ícone e nome", async () => {
+      const modal = await formulario();
+      fireEvent.drop(within(modal).getByTestId("area-de-anexos"), { dataTransfer: { files: [pdf()] } });
+      expect(within(modal).getByText("boleto.pdf")).toBeInTheDocument();
+      expect(within(modal).queryByRole("img", { name: "boleto.pdf" })).toBeNull();
+    });
+
+    it("recusa no cliente tipo não aceito e arquivo acima de 10 MB, com mensagem", async () => {
+      const modal = await formulario();
+      const grande = new File(["x"], "grande.png", { type: "image/png" });
+      Object.defineProperty(grande, "size", { value: 10 * 1024 * 1024 + 1 });
+      fireEvent.change(within(modal).getByLabelText("Anexos"), {
+        target: { files: [new File(["t"], "texto.txt", { type: "text/plain" }), grande] } });
+      expect(within(modal).getByText(/texto\.txt não é JPG, PNG, WebP nem PDF\./)).toBeInTheDocument();
+      expect(within(modal).getByText(/grande\.png passa de 10 MB\./)).toBeInTheDocument();
+      expect(within(modal).queryAllByRole("img")).toHaveLength(0);
+    });
+
+    it("no máximo 5 por contato", async () => {
+      const modal = await formulario();
+      const seis = Array.from({ length: 6 }, (_, i) => new File(["p"], `p${i}.png`, { type: "image/png" }));
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: seis } });
+      expect(within(modal).getAllByRole("img")).toHaveLength(5);
+      expect(within(modal).getByText(/No máximo 5 anexos por contato\./)).toBeInTheDocument();
+    });
+
+    it("tirar da lista antes de salvar", async () => {
+      const modal = await formulario();
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [png()] } });
+      fireEvent.click(within(modal).getByRole("button", { name: "Tirar print.png" }));
+      expect(within(modal).queryByRole("img", { name: "print.png" })).toBeNull();
+    });
+
+    it("anexo que falha depois do contato salvo avisa em Alert e o contato fica", async () => {
+      falso.atual!.estado.erroDeAnexo = "Este contato já tem 5 anexo(s); o limite é 5 por contato.";
+      const modal = await formulario();
+      fireEvent.change(within(modal).getByLabelText("Canal"), { target: { value: "telefone" } });
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [png()] } });
+      fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+      await assentar(); await assentar(); await assentar();
+      expect(falso.atual!.estado.eventos).toHaveLength(1);
+      const alerta = within(modal).getByRole("alert");
+      expect(alerta).toHaveTextContent("O contato foi salvo, mas os anexos não");
+      expect(alerta).toHaveTextContent("o limite é 5 por contato.");
+    });
+
+    it("a linha do tempo mostra a imagem em miniatura e o PDF com ícone e nome", async () => {
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(7, "foto.png", "image/png"), anexo(8, "boleto.pdf", "application/pdf")]) };
+      const modal = await abrirCobranca();
+      expect(within(modal).getByRole("img", { name: "foto.png" })).toHaveAttribute("src", expect.stringMatching(/^blob:/));
+      expect(within(modal).getByText("boleto.pdf")).toBeInTheDocument();
+      expect(falso.atual!.estado.anexosBaixados).toEqual([7]); // o PDF só baixa no clique
+    });
+
+    it("clicar na imagem abre grande num diálogo", async () => {
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(7, "foto.png", "image/png")]) };
+      const modal = await abrirCobranca();
+      fireEvent.click(within(modal).getByRole("button", { name: "Abrir foto.png" }));
+      const visor = screen.getByRole("dialog", { name: "foto.png" });
+      expect(within(visor).getByRole("img", { name: "foto.png" })).toBeInTheDocument();
+      fireEvent.keyDown(visor, { key: "Escape" });
+      expect(screen.queryByRole("dialog", { name: "foto.png" })).toBeNull();
+      expect(screen.getByRole("dialog")).toBe(modal); // o Esc fecha só o visor
+    });
+
+    it("clicar no PDF abre numa aba nova", async () => {
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(8, "boleto.pdf", "application/pdf")]) };
+      const aba = { location: { href: "" }, opener: {} as unknown, close: vi.fn() };
+      const abrirJanela = vi.spyOn(window, "open").mockReturnValue(aba as unknown as Window);
+      const modal = await abrirCobranca();
+      fireEvent.click(within(modal).getByRole("button", { name: "Abrir boleto.pdf" }));
+      await assentar(); await assentar();
+      expect(abrirJanela).toHaveBeenCalledWith("", "_blank");
+      expect(falso.atual!.estado.anexosBaixados).toEqual([8]);
+      expect(aba.location.href).toMatch(/^blob:/);
+      expect(aba.opener).toBeNull();
+    });
+
+    it("apagar pede confirmação na própria tela, apaga e recarrega a linha do tempo", async () => {
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(7, "foto.png", "image/png")]) };
+      const modal = await abrirCobranca();
+      fireEvent.click(within(modal).getByRole("button", { name: "Apagar foto.png" }));
+      expect(falso.atual!.estado.anexosApagados).toEqual([]);
+      expect(within(modal).getByText("Apagar foto.png?")).toBeInTheDocument();
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([]) };
+      fireEvent.click(within(modal).getByRole("button", { name: "Apagar" }));
+      await assentar(); await assentar();
+      expect(falso.atual!.estado.anexosApagados).toEqual([7]);
+      expect(within(modal).queryByRole("img", { name: "foto.png" })).toBeNull();
+    });
+
+    it("cancelar a confirmação não apaga", async () => {
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(7, "foto.png", "image/png")]) };
+      const modal = await abrirCobranca();
+      fireEvent.click(within(modal).getByRole("button", { name: "Apagar foto.png" }));
+      fireEvent.click(within(modal).getByRole("button", { name: "Não apagar" }));
+      await assentar();
+      expect(falso.atual!.estado.anexosApagados).toEqual([]);
+      expect(within(modal).queryByText("Apagar foto.png?")).toBeNull();
+    });
+
+    it("Anexar depois envia para o evento escolhido e recarrega", async () => {
+      const modal = await abrirCobranca();
+      const [anexar] = within(modal).getAllByRole("button", { name: "Anexar" });
+      fireEvent.click(anexar);
+      const arquivo = png();
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [arquivo] } });
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(9, "print.png", "image/png")]) };
+      fireEvent.click(within(modal).getByRole("button", { name: "Enviar anexos" }));
+      await assentar(); await assentar(); await assentar();
+      expect(falso.atual!.estado.anexosEnviados).toEqual([{ eventoId: 2, arquivos: [arquivo] }]);
+      expect(within(modal).queryByRole("button", { name: "Enviar anexos" })).toBeNull();
+      expect(within(modal).getByRole("button", { name: "Abrir print.png" })).toBeInTheDocument();
+    });
+
+    it("Anexar respeita o limite: com 5 anexos o botão some e com 4 só cabe mais 1", async () => {
+      const cinco = [1, 2, 3, 4, 5].map((i) => anexo(i, `f${i}.png`, "image/png"));
+      falso.atual!.estado.detalhes = { "11111111": comAnexos(cinco) };
+      let modal = await abrirCobranca();
+      expect(within(modal).getAllByRole("button", { name: "Anexar" })).toHaveLength(1); // só o outro evento
+      cleanup();
+      falso.atual!.estado.detalhes = { "11111111": comAnexos(cinco.slice(0, 4)) };
+      modal = await abrirCobranca();
+      fireEvent.click(within(modal).getAllByRole("button", { name: "Anexar" })[0]);
+      fireEvent.change(within(modal).getByLabelText("Anexos"), { target: { files: [png(), pdf()] } });
+      expect(within(modal).getByText(/Este contato só aceita mais 1 anexo\./)).toBeInTheDocument();
+    });
+
+    it("fechar o modal revoga as URLs criadas", async () => {
+      falso.atual!.estado.detalhes = { "11111111": comAnexos([anexo(7, "foto.png", "image/png")]) };
+      await abrirCobranca();
+      expect(criados.length).toBeGreaterThan(0);
+      cleanup();
+      expect(revogados).toEqual(expect.arrayContaining(criados));
+    });
   });
 });
 

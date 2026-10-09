@@ -88,6 +88,16 @@ export interface Ciclo {
   ultimo_contato_em: string | null;
 }
 
+/** Anexo de um evento da cobrança (imagem ou PDF). O arquivo só sai por `baixarAnexo`, com o token. */
+export interface AnexoDoEvento {
+  id: number;
+  nome_original: string;
+  tipo: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
+  tamanho: number;
+  enviado_por: string;
+  enviado_em: string;
+}
+
 export interface Evento {
   id: number;
   ciclo_id: number;
@@ -104,6 +114,7 @@ export interface Evento {
   promessa_condicoes: string | null;
   anotacao: string | null;
   valor_inadimplente: number | null;
+  anexos: AnexoDoEvento[];
 }
 
 export interface DetalheDaEmpresa {
@@ -123,6 +134,9 @@ export interface DetalheDaEmpresa {
   ciclos_anteriores: Ciclo[];
   eventos: Evento[];
 }
+
+/** A resposta do registro de contato: o detalhe novo e o id do evento gravado (para os anexos). */
+export interface DetalheComEventoNovo extends DetalheDaEmpresa { evento_id: number }
 
 export interface PontoDeTaxa {
   valor: number;
@@ -177,6 +191,20 @@ export const fetchTitulos = async (empresa: string) =>
 export const fetchIndicadores = async (params: FiltrosDeIndicadores = {}) =>
   (await api.get<Indicadores>("/inadimplencia/indicadores", { params })).data;
 export const registrarEvento = async (empresa: string, dados: NovoEvento) =>
-  (await api.post<DetalheDaEmpresa>(`${url(empresa)}/eventos`, dados)).data;
+  (await api.post<DetalheComEventoNovo>(`${url(empresa)}/eventos`, dados)).data;
 export const gravarObservacao = async (empresa: string, texto: string) =>
   (await api.put<DetalheDaEmpresa>(`${url(empresa)}/observacao`, { texto })).data;
+
+/** Envia de 1 a 5 arquivos para um evento (multipart, campo `arquivos` repetido). O axios deixa o
+ *  navegador pôr o `Content-Type` com o boundary; o backend exige o Content-Length, que o navegador põe. */
+export const enviarAnexos = async (eventoId: number, arquivos: File[]) => {
+  const corpo = new FormData();
+  arquivos.forEach((a) => corpo.append("arquivos", a, a.name));
+  return (await api.post<AnexoDoEvento[]>(`/inadimplencia/eventos/${eventoId}/anexos`, corpo)).data;
+};
+/** O arquivo como Blob, buscado com o Bearer — não existe link público do anexo. */
+export const baixarAnexo = async (anexoId: number) =>
+  (await api.get<Blob>(`/inadimplencia/anexos/${anexoId}`, { responseType: "blob" })).data;
+export const apagarAnexo = async (anexoId: number) => {
+  await api.delete(`/inadimplencia/anexos/${anexoId}`);
+};
