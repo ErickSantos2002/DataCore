@@ -15,6 +15,8 @@ export interface FiltrosDeIndicadoresProps {
   formas: string[];
   ufs: string[];
   cliente: string;
+  /** Mês final antes do inicial: a tela não busca e o campo avisa. */
+  periodoInvertido?: boolean;
   onPreset: (v: string) => void;
   onMesInicio: (v: string) => void;
   onMesFim: (v: string) => void;
@@ -73,8 +75,11 @@ export function FiltrosDeIndicadores(p: FiltrosDeIndicadoresProps) {
           value={p.preset}
           onChange={(e) => p.onPreset(e.target.value)}
         />
-        <Input label="Mês inicial" type="month" value={p.mesInicio} onChange={(e) => p.onMesInicio(e.target.value)} />
-        <Input label="Mês final" type="month" value={p.mesFim} onChange={(e) => p.onMesFim(e.target.value)} />
+        <Input label="Mês inicial" type="month" value={p.mesInicio} max={p.mesFim || undefined}
+          onChange={(e) => p.onMesInicio(e.target.value)} />
+        <Input label="Mês final" type="month" value={p.mesFim} min={p.mesInicio || undefined}
+          error={p.periodoInvertido ? "O mês final não pode ser antes do inicial." : undefined}
+          onChange={(e) => p.onMesFim(e.target.value)} />
         <Input
           label="Cliente"
           placeholder="Nome ou CNPJ (a raiz pega as filiais)"

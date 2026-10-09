@@ -69,6 +69,9 @@ def params_base(hoje: date) -> dict:
 SEM_VALOR = "__sem__"
 #: A partir de quantos dígitos o texto do cliente também procura no documento (a raiz do CNPJ tem 8).
 DIGITOS_PARA_DOCUMENTO = 8
+#: Só texto com cara de documento (dígitos e pontuação) busca no documento: "Alfa 2024 0001" tem
+#: 8 dígitos, mas é nome — sem esta trava ele casava qualquer CNPJ que começasse por 20240001.
+_SO_DOCUMENTO = re.compile(r"[\d./\- ]+")
 _MES = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
 
@@ -106,7 +109,8 @@ def params_de_titulos(hoje: date, *, mes_inicio: Optional[str] = None, mes_fim: 
             "tit_campo": "vencimento", "tit_ini": de, "tit_fim": ate,
             "tit_categorias": categoria or None, "tit_formas": forma_pagamento or None, "tit_ufs": uf or None,
             "tit_nome": _padrao_do_nome(texto) if texto else None,
-            "tit_doc": digitos if len(digitos) >= DIGITOS_PARA_DOCUMENTO else None}
+            "tit_doc": digitos if _SO_DOCUMENTO.fullmatch(texto) and len(digitos) >= DIGITOS_PARA_DOCUMENTO
+                       else None}
 
 
 def params_do_recorte(hoje: date, *, status: Optional[List[str]] = None, faixa: Optional[str] = None,
@@ -617,9 +621,9 @@ class Indicadores(BaseModel):
 # As opções dos selects saem da base inteira, SEM os filtros: escolher uma categoria não pode
 # sumir com as outras do select. Nulo e vazio ficam de fora — a tela acrescenta "Sem …" (`__sem__`).
 SQL_OPCOES = """
-SELECT array_agg(DISTINCT trim(categoria)) FILTER (WHERE trim(categoria) <> '')             AS categorias,
-       array_agg(DISTINCT trim(forma_pagamento)) FILTER (WHERE trim(forma_pagamento) <> '') AS formas_pagamento,
-       array_agg(DISTINCT trim(cliente_uf)) FILTER (WHERE trim(cliente_uf) <> '')           AS ufs
+SELECT array_agg(DISTINCT trim(categoria) ORDER BY trim(categoria)) FILTER (WHERE trim(categoria) <> '')             AS categorias,
+       array_agg(DISTINCT trim(forma_pagamento) ORDER BY trim(forma_pagamento)) FILTER (WHERE trim(forma_pagamento) <> '') AS formas_pagamento,
+       array_agg(DISTINCT trim(cliente_uf) ORDER BY trim(cliente_uf)) FILTER (WHERE trim(cliente_uf) <> '')           AS ufs
 FROM tiny.contas_receber
 WHERE excluida_na_origem_em IS NULL
   AND lower(COALESCE(situacao, '')) <> ALL(CAST(:canceladas AS text[]))
@@ -650,7 +654,8 @@ def _taxa(l) -> dict:
 
 def opcoes_dos_filtros(db: Session) -> OpcoesDosFiltros:
     l = db.execute(text(SQL_OPCOES), {"canceladas": SITUACOES_CANCELADAS}).mappings().one()
-    return OpcoesDosFiltros(**{k: sorted(v or []) for k, v in l.items()})
+    # A ordem é a do banco (collation): o `sorted` do Python jogava "Água" e minúsculas para o fim.
+    return OpcoesDosFiltros(**{k: list(v or []) for k, v in l.items()})
 
 
 def indicadores(db: Session, hoje: date, *, mes_inicio: Optional[str] = None, mes_fim: Optional[str] = None,

@@ -743,4 +743,34 @@ describe("Inadimplência — filtros da aba Indicadores", () => {
     expect(screen.getByText("Taxa mensal")).toBeInTheDocument();
     expect(screen.getByText("15,8%")).toBeInTheDocument();
   });
+
+  it("mês final antes do inicial não busca: avisa no campo e mantém os números", async () => {
+    await abrirIndicadores();
+    escolher("Mês inicial", "2025-06");
+    await assentar();
+    expect(screen.getByLabelText("Mês final")).toHaveAttribute("min", "2025-06");
+    expect(screen.getByLabelText("Mês inicial")).not.toHaveAttribute("max");
+    escolher("Mês final", "2025-01");
+    await assentar();
+    expect(screen.getByLabelText("Mês inicial")).toHaveAttribute("max", "2025-01");
+    expect(screen.getByText("O mês final não pode ser antes do inicial.")).toBeInTheDocument();
+    expect(falso.atual!.estado.pedidosIndicadores.some((p) => p.mes_fim === "2025-01")).toBe(false);
+    expect(ultimoPedidoDeIndicadores()).toEqual({ mes_inicio: "2025-06" });
+    expect(screen.getByText("15,8%")).toBeInTheDocument();
+    escolher("Mês final", "2025-08");
+    await assentar();
+    expect(screen.queryByText("O mês final não pode ser antes do inicial.")).toBeNull();
+    expect(ultimoPedidoDeIndicadores()).toEqual({ mes_inicio: "2025-06", mes_fim: "2025-08" });
+  });
+
+  it("com período, o ano e a média dizem que são do período", async () => {
+    await abrirIndicadores();
+    expect(screen.getByText("Ano 2026 (até agora)")).toBeInTheDocument();
+    expect(screen.getByText("Média dos últimos 12 meses")).toBeInTheDocument();
+    escolher("Mês inicial", "2026-01");
+    await assentar();
+    expect(screen.getByText("Ano 2026 (no período)")).toBeInTheDocument();
+    expect(screen.getByText("Média dos últimos 12 meses do período")).toBeInTheDocument();
+    expect(screen.queryByText("Ano 2026 (até agora)")).toBeNull();
+  });
 });

@@ -62,8 +62,13 @@ function useFiltrosDeIndicadores() {
     return f;
   }, [mesInicio, mesFim, categorias, formas, ufs, cliente]);
 
+  // `AAAA-MM` compara como texto. Período invertido não vai para a API (seria 422 e a tela
+  // perderia os números): a busca fica parada no último recorte válido e o campo avisa.
+  const periodoInvertido = Boolean(mesInicio && mesFim && mesFim < mesInicio);
+
   return {
     filtros,
+    periodoInvertido,
     barra: {
       preset, mesInicio, mesFim, categorias, formas, ufs, cliente: textoCliente,
       onPreset: escolherPreset,
@@ -97,12 +102,13 @@ export function textoDoTooltip(m: MesDeTaxa): string {
  */
 export function AbaIndicadores({ ativo }: { ativo: boolean }) {
   useTemaDoGrafico();
-  const { filtros, barra } = useFiltrosDeIndicadores();
-  const { dado: i, carregando, erro } = useIndicadores(ativo, filtros);
+  const { filtros, periodoInvertido, barra } = useFiltrosDeIndicadores();
+  // Com `ativo` falso a chave é nula e o hook guarda o último dado: é assim que o período invertido não busca.
+  const { dado: i, carregando, erro } = useIndicadores(ativo && !periodoInvertido, filtros);
   // O spinner é só da primeira carga: depois, os números antigos ficam até os novos chegarem.
   if (carregando && !i) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>;
 
-  const barraDeFiltros = <FiltrosDeIndicadores opcoes={i?.opcoes ?? null} {...barra} />;
+  const barraDeFiltros = <FiltrosDeIndicadores opcoes={i?.opcoes ?? null} periodoInvertido={periodoInvertido} {...barra} />;
   if (!i) {
     return (
       <div className="flex flex-col gap-6">
@@ -113,6 +119,9 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
   }
 
   const vazio = i.total.titulos === 0;
+  // Com período, "até agora" e "últimos 12 meses" enganam: o ano e a média são só do recorte.
+  const comPeriodo = Boolean(filtros.mes_inicio || filtros.mes_fim);
+  const sufixoDoAno = comPeriodo ? "(no período)" : "(até agora)";
   const rotuloTotal = rotuloDoTotal({
     mes_inicio: filtros.mes_inicio, mes_fim: filtros.mes_fim,
     outros: Boolean(filtros.categoria || filtros.forma_pagamento || filtros.uf || filtros.cliente),
@@ -132,9 +141,9 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
           <KpiCard label={`Último mês fechado (${nomeDoMes(i.ultimo_fechado.mes)})`} value={formatarPercentual(i.ultimo_fechado.taxa)} tone="perigo"
             note={`${formatarMoeda(i.ultimo_fechado.inadimplente)} de ${formatarMoeda(i.ultimo_fechado.valor)} que venceram`} />
         ) : vazio ? <KpiCard label="Último mês fechado" value="—" tone="perigo" /> : null}
-        <KpiCard label="Média dos últimos 12 meses" value={formatarPercentual(i.media_12_meses)} tone="acao" />
+        <KpiCard label={comPeriodo ? "Média dos últimos 12 meses do período" : "Média dos últimos 12 meses"} value={formatarPercentual(i.media_12_meses)} tone="acao" />
         {anoAtual ? (
-          <KpiCard label={`Ano ${anoAtual.ano} (até agora)`} value={formatarPercentual(anoAtual.taxa)} tone="perigo"
+          <KpiCard label={`Ano ${anoAtual.ano} ${sufixoDoAno}`} value={formatarPercentual(anoAtual.taxa)} tone="perigo"
             note={anoAnterior ? comparacaoComAnoAnterior(anoAtual.taxa, anoAnterior.taxa, anoAnterior.ano) : undefined} />
         ) : null}
         <KpiCard label={rotuloTotal} value={formatarPercentual(i.total.taxa)}
@@ -174,7 +183,7 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
         <Card>
           <CardTitle>Taxa anual</CardTitle>
           <div className="mt-3 flex flex-col gap-2">
-            {[...i.anual.map((a) => ({ chave: String(a.ano), rotulo: a.ano_corrente ? `${a.ano} (até agora)` : String(a.ano), taxa: a.taxa, cor: "var(--color-danger-500)" })),
+            {[...i.anual.map((a) => ({ chave: String(a.ano), rotulo: a.ano_corrente ? `${a.ano} ${sufixoDoAno}` : String(a.ano), taxa: a.taxa, cor: "var(--color-danger-500)" })),
               { chave: "total", rotulo: "Total", taxa: i.total.taxa, cor: "var(--action)" }].map((l) => (
               <div key={l.chave} className="grid grid-cols-[110px_1fr_60px] items-center gap-3 text-sm">
                 <span className="font-medium">{l.rotulo}</span>

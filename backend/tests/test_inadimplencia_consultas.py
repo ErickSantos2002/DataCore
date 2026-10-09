@@ -562,3 +562,17 @@ def test_intervalo_dos_meses():
     assert intervalo_dos_meses("2024-02", "2024-02") == (date(2024, 2, 1), date(2024, 2, 29))
     assert intervalo_dos_meses(None, "2026-12") == (None, date(2026, 12, 31))
     assert intervalo_dos_meses(None, None) == (None, None)
+
+
+def test_opcoes_na_ordem_do_banco(db, contas):
+    # a collation do banco põe acento e minúscula no lugar; o sorted do Python mandaria "Água" para o fim
+    for c in ("Venda", "Água", "aço"):
+        contas(hoje=FIXO, venceu_ha=40, categoria=c)
+    assert _ind(db).opcoes.categorias == ["aço", "Água", "Venda"]
+
+
+def test_nome_com_numeros_nao_vira_busca_por_documento(db, contas):
+    contas(hoje=FIXO, nome="Gama", doc="20.240.001/0001-11", venceu_ha=40, valor=100)
+    contas(hoje=FIXO, nome="Alfa 2024 0001", doc="33.333.333/0001-33", venceu_ha=40, valor=200)
+    assert _ind(db, cliente="Alfa 2024 0001").total.valor == 200
+    assert _ind(db, cliente="20.240.001").total.valor == 100
