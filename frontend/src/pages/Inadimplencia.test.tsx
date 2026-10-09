@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import Inadimplencia from "./Inadimplencia";
 import { textoDoTooltip } from "./inadimplencia/AbaIndicadores";
 import { AuthContext } from "../context/AuthContext";
+import { diaLocal } from "../lib/datas";
 import type { DetalheDaEmpresa, EmpresaDaLista, Indicadores, ResumoDeInadimplencia } from "../services/inadimplencia";
 import type { ContaDaTela } from "../services/notasapi";
 
@@ -89,7 +90,7 @@ async function montar() {
 beforeEach(() => {
   const e = falso.atual!.estado;
   Object.assign(e, { modo: "ok", resumo: RESUMO, empresas: EMPRESAS, pedidos: [], eventos: [],
-                     observacoes: [], erroDeGravacao: null });
+                     observacoes: [], erroDeGravacao: null, pedidosResumo: [] });
 });
 
 describe("Inadimplência — aba Cobrança", () => {
@@ -183,6 +184,145 @@ describe("Inadimplência — aba Cobrança", () => {
   });
 });
 
+function ultimoPedidoDoResumo() {
+  const p = falso.atual!.estado.pedidosResumo;
+  return p[p.length - 1];
+}
+
+function escolher(rotulo: string, valor: string) {
+  fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
+}
+
+describe("Inadimplência — filtros da aba Cobrança", () => {
+  it("a barra tem os filtros de data e de contato, com os padrões da spec", async () => {
+    await montar();
+    expect(screen.getByLabelText("Filtrar data por")).toHaveValue("vencimento");
+    const opcoes = within(screen.getByLabelText("Filtrar data por")).getAllByRole("option").map((o) => o.textContent);
+    expect(opcoes).toEqual(["Vencimento", "Emissão", "Promessa", "Último contato"]);
+    expect(screen.getByLabelText("Período Rápido")).toHaveValue("todos");
+    expect(screen.getByLabelText("Faixa de atraso")).toHaveValue("");
+    expect(screen.getByLabelText("Sem contato há mais de")).toHaveValue("");
+    expect(ultimoPedido().data_tipo).toBeUndefined();
+    expect(ultimoPedido().data_inicio).toBeUndefined();
+  });
+
+  it("tipo de data e datas vão para a lista e para o resumo; mexer na data vira Personalizado", async () => {
+    await montar();
+    escolher("Filtrar data por", "emissao");
+    escolher("Data Início", "2026-09-01");
+    escolher("Data Fim", "2026-09-30");
+    await assentar();
+    expect(screen.getByLabelText("Período Rápido")).toHaveValue("custom");
+    const esperado = { data_tipo: "emissao", data_inicio: "2026-09-01", data_fim: "2026-09-30" };
+    expect(ultimoPedido()).toMatchObject(esperado);
+    expect(ultimoPedidoDoResumo()).toMatchObject(esperado);
+  });
+
+  it("sem data nenhuma o tipo de data não vai (nada a recortar)", async () => {
+    await montar();
+    escolher("Filtrar data por", "promessa");
+    await assentar();
+    expect(ultimoPedido().data_tipo).toBeUndefined();
+  });
+
+  it("Próximos 7 dias vai de hoje até hoje + 7", async () => {
+    await montar();
+    escolher("Período Rápido", "proximos7");
+    await assentar();
+    const hoje = new Date();
+    const mais7 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 7);
+    expect(screen.getByLabelText("Data Início")).toHaveValue(diaLocal(hoje));
+    expect(ultimoPedido()).toMatchObject({ data_tipo: "vencimento", data_inicio: diaLocal(hoje), data_fim: diaLocal(mais7) });
+  });
+
+  it("sem contato há mais de manda 7, 15, 30 ou nunca", async () => {
+    await montar();
+    const opcoes = within(screen.getByLabelText("Sem contato há mais de")).getAllByRole("option").map((o) => o.textContent);
+    expect(opcoes).toEqual(["Qualquer", "7 dias", "15 dias", "30 dias", "Nunca contatado"]);
+    for (const v of ["7", "15", "30", "nunca"]) {
+      escolher("Sem contato há mais de", v);
+      await assentar();
+      expect(ultimoPedido().sem_contato).toBe(v);
+      expect(ultimoPedidoDoResumo().sem_contato).toBe(v);
+    }
+    escolher("Sem contato há mais de", "");
+    await assentar();
+    expect(ultimoPedido().sem_contato).toBeUndefined();
+  });
+
+  it("o select de faixa e a barra colorida são o mesmo estado", async () => {
+    await montar();
+    escolher("Faixa de atraso", "61_90");
+    await assentar();
+    expect(ultimoPedido().faixa).toBe("61_90");
+    expect(ultimoPedidoDoResumo().faixa).toBe("61_90");
+    expect(screen.getByRole("button", { name: /61–90 dias/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Mais de 90 dias/ }));
+    await assentar();
+    expect(screen.getByLabelText("Faixa de atraso")).toHaveValue("90_mais");
+    fireEvent.click(screen.getByRole("button", { name: /Mais de 90 dias/ }));
+    await assentar();
+    expect(screen.getByLabelText("Faixa de atraso")).toHaveValue("");
+    expect(ultimoPedido().faixa).toBeUndefined();
+  });
+
+  it("o resumo recebe status e faixa mas não a busca", async () => {
+    await montar();
+    fireEvent.change(screen.getByLabelText("Pesquisar empresas"), { target: { value: "beta" } });
+    await assentar();
+    expect(ultimoPedidoDoResumo()).not.toHaveProperty("busca");
+    fireEvent.click(screen.getByRole("button", { name: "Filtrar: Promessas quebradas" }));
+    await assentar();
+    expect(ultimoPedidoDoResumo()).toMatchObject({ status: ["quebrada"] });
+    expect(ultimoPedidoDoResumo()).not.toHaveProperty("incluir_atraso");
+  });
+
+  it("mudar qualquer filtro volta para a página 1", async () => {
+    falso.atual!.estado.empresas = Array.from({ length: 40 }, (_, i) =>
+      empresa({ empresa: String(10000000 + i), nome: `Empresa ${i}` }));
+    await montar();
+    const controles: [string, string][] = [
+      ["Filtrar data por", "emissao"], ["Período Rápido", "mesAtual"], ["Data Início", "2026-01-01"],
+      ["Data Fim", "2026-12-31"], ["Faixa de atraso", "31_60"], ["Sem contato há mais de", "15"],
+    ];
+    for (const [rotulo, valor] of controles) {
+      fireEvent.click(screen.getByRole("button", { name: "Próxima página" }));
+      await assentar();
+      expect(ultimoPedido().offset).toBeGreaterThan(0);
+      escolher(rotulo, valor);
+      await assentar();
+      expect(ultimoPedido().offset, rotulo).toBe(0);
+    }
+  });
+
+  it("a nota do Recuperado aparece só com filtro de data ativo", async () => {
+    await montar();
+    expect(screen.queryByText(/histórico todo, não segue o filtro/)).toBeNull();
+    escolher("Data Início", "2026-09-01");
+    await assentar();
+    expect(screen.getByText(/histórico todo, não segue o filtro/)).toBeInTheDocument();
+  });
+
+  it("trocar filtro não troca a tela por um spinner (a barra de filtros fica)", async () => {
+    await montar();
+    falso.atual!.estado.modo = "pendente";
+    escolher("Sem contato há mais de", "7");
+    await assentar();
+    expect(screen.getByLabelText("Sem contato há mais de")).toHaveValue("7");
+    expect(screen.getByText("30,0%")).toBeInTheDocument();
+  });
+
+  it("exportar usa os mesmos filtros, sem a paginação", async () => {
+    await montar();
+    escolher("Sem contato há mais de", "nunca");
+    escolher("Data Início", "2026-09-01");
+    await assentar();
+    fireEvent.click(screen.getByRole("button", { name: /Exportar/ }));
+    await assentar();
+    expect(ultimoPedido()).toMatchObject({ sem_contato: "nunca", data_inicio: "2026-09-01", limite: 1000, offset: 0 });
+  });
+});
+
 const DETALHE: DetalheDaEmpresa = {
   empresa: "11111111", nome: "Alfa Ltda", documento: "11.111.111 · 2 filiais", valor_devido: 2000,
   valor_inadimplente: 1500, maior_atraso: 95, telefone: "(11) 0000-0000", email: "fin@alfa.exemplo",
@@ -238,6 +378,11 @@ describe("Inadimplência — modal da empresa", () => {
     expect(within(modal).getByText("11.111.111 · 2 filiais")).toBeInTheDocument();
     expect(within(modal).getByText("(11) 0000-0000")).toBeInTheDocument();
     expect(within(modal).getByText("Só boleto por e-mail")).toBeInTheDocument();
+  });
+
+  it("abre no modal largo (size full) para a tabela de títulos caber", async () => {
+    const modal = await abrir();
+    expect(modal.className).toContain("max-w-7xl");
   });
 
   it("aba Títulos agrupa por filial com subtotal e põe os a vencer por último", async () => {

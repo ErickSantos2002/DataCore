@@ -1,14 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 
-import {
-  Alert, FilterBar, KpiCard, MultiSelect, Spinner, Switch,
-} from "../../design-system/ui";
+import { Alert, KpiCard, Spinner } from "../../design-system/ui";
+import { usePeriodo } from "../../hooks/usePeriodo";
 import { baixarPlanilha } from "../../lib/planilha";
-import type { ChaveDeFaixa, CodigoDeStatus, FiltrosDeEmpresas } from "../../services/inadimplencia";
+import type {
+  ChaveDeFaixa, CodigoDeStatus, FiltrosDeEmpresas, FiltrosDoResumo, SemContato, TipoDeData,
+} from "../../services/inadimplencia";
 import {
   ITENS_POR_PAGINA, formatarMoeda, nomeDoArquivo, proximaOrdenacao, type Ordenacao,
 } from "../contas/contas";
-import { FAIXAS, STATUS, formatarPercentual, linhasDaPlanilhaDeEmpresas } from "./inadimplencia";
+import { FAIXAS, formatarPercentual, linhasDaPlanilhaDeEmpresas } from "./inadimplencia";
+import { FiltrosDeCobranca } from "./FiltrosDeCobranca";
 import { ModalDaEmpresa } from "./ModalDaEmpresa";
 import { TabelaDeEmpresas } from "./TabelaDeEmpresas";
 import { todasAsEmpresas, useEmpresas, useResumo } from "./useInadimplencia";
@@ -16,9 +18,11 @@ import { todasAsEmpresas, useEmpresas, useResumo } from "./useInadimplencia";
 const ORDENACAO_INICIAL: Ordenacao = { campo: "valor", direcao: "desc" };
 
 export function AbaCobranca() {
-  const resumo = useResumo();
+  const [dataTipo, setDataTipo] = useState<TipoDeData>("vencimento");
+  const { preset, escolherPreset, dataInicio, setDataInicio, dataFim, setDataFim } = usePeriodo();
   const [status, setStatus] = useState<CodigoDeStatus[]>([]);
   const [faixa, setFaixa] = useState<ChaveDeFaixa | null>(null);
+  const [semContato, setSemContato] = useState<SemContato | null>(null);
   const [incluirAtraso, setIncluirAtraso] = useState(false);
   const [pesquisa, setPesquisa] = useState("");
   const [pagina, setPagina] = useState(1);
@@ -26,16 +30,27 @@ export function AbaCobranca() {
   const [aberta, setAberta] = useState<string | null>(null);
   const hoje = useMemo(() => new Date(), []);
 
-  const filtros = useMemo<FiltrosDeEmpresas>(() => ({
-    busca: pesquisa.trim() || undefined,
+  /** O recorte que a lista e os cards compartilham; a busca por nome só mexe na lista. */
+  const recorte = useMemo<FiltrosDoResumo>(() => ({
     status: status.length ? status : undefined,
     faixa: faixa ?? undefined,
+    // o tipo só vai com alguma data: sem período não há o que recortar
+    data_tipo: dataInicio || dataFim ? dataTipo : undefined,
+    data_inicio: dataInicio || undefined,
+    data_fim: dataFim || undefined,
+    sem_contato: semContato ?? undefined,
+  }), [status, faixa, dataTipo, dataInicio, dataFim, semContato]);
+  const resumo = useResumo(recorte);
+
+  const filtros = useMemo<FiltrosDeEmpresas>(() => ({
+    ...recorte,
+    busca: pesquisa.trim() || undefined,
     incluir_atraso: incluirAtraso || faixa === "atraso" || undefined,
     ordenar_por: ordenacao.campo,
     direcao: ordenacao.direcao,
     limite: ITENS_POR_PAGINA,
     offset: (pagina - 1) * ITENS_POR_PAGINA,
-  }), [pesquisa, status, faixa, incluirAtraso, ordenacao, pagina]);
+  }), [recorte, pesquisa, incluirAtraso, faixa, ordenacao, pagina]);
   const lista = useEmpresas(filtros);
 
   /** Mudar qualquer filtro volta para a página 1. */
@@ -64,7 +79,8 @@ export function AbaCobranca() {
   }, [filtros]);
 
   const r = resumo.dado;
-  if (resumo.carregando) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>;
+  // O spinner é só da primeira carga: depois, os cards antigos ficam até os novos chegarem.
+  if (resumo.carregando && !r) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>;
 
   const erro = resumo.erro ?? lista.erro;
 
@@ -79,7 +95,7 @@ export function AbaCobranca() {
             <KpiCard label="Em atraso (até 30 dias)" value={formatarMoeda(r.em_atraso)} tone="alerta" />
             <KpiCard label="Inadimplente (mais de 30 dias)" value={formatarMoeda(r.inadimplente)} tone="perigo" note={`${r.titulos_inadimplentes} títulos · ${r.empresas_inadimplentes} empresas`} />
             <KpiCard label="Inadimplência da carteira" value={formatarPercentual(r.inadimplencia_carteira)} tone="perigo" note={`do total a receber (${formatarMoeda(r.total_a_receber)})`} />
-            <KpiCard label="Recuperado depois do atraso" value={formatarPercentual(r.recuperado)} tone="positivo" note="do que passou de 30 dias, quanto entrou depois" />
+            <KpiCard label="Recuperado depois do atraso" value={formatarPercentual(r.recuperado)} tone="positivo" note={dataInicio || dataFim ? "do que passou de 30 dias, quanto entrou depois · histórico todo, não segue o filtro" : "do que passou de 30 dias, quanto entrou depois"} />
           </div>
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -100,22 +116,18 @@ export function AbaCobranca() {
         </>
       ) : null}
 
-      <FilterBar>
-        <div className="grid w-full grid-cols-1 items-end gap-4 md:grid-cols-3">
-          <MultiSelect
-            rotulo="Status"
-            opcoes={Object.entries(STATUS).filter(([valor]) => valor !== "pago").map(([valor, s]) => ({ valor, rotulo: s.rotulo }))}
-            selecionados={status}
-            onChange={(v) => mudou(setStatus)(v as CodigoDeStatus[])}
-            placeholder="Todos"
-          />
-          <Switch
-            label="Incluir empresas só em atraso (1–30 dias)"
-            checked={incluirAtraso}
-            onChange={mudou(setIncluirAtraso)}
-          />
-        </div>
-      </FilterBar>
+      <FiltrosDeCobranca
+        dataTipo={dataTipo} preset={preset} dataInicio={dataInicio} dataFim={dataFim}
+        status={status} faixa={faixa} semContato={semContato} incluirAtraso={incluirAtraso}
+        onDataTipo={mudou(setDataTipo)}
+        onPreset={(v) => { escolherPreset(v); setPagina(1); }}
+        onDataInicio={(v) => { setDataInicio(v); escolherPreset("custom"); setPagina(1); }}
+        onDataFim={(v) => { setDataFim(v); escolherPreset("custom"); setPagina(1); }}
+        onStatus={mudou(setStatus)}
+        onFaixa={mudou(setFaixa)}
+        onSemContato={mudou(setSemContato)}
+        onIncluirAtraso={mudou(setIncluirAtraso)}
+      />
 
       <TabelaDeEmpresas
         empresas={lista.dado?.itens ?? []}

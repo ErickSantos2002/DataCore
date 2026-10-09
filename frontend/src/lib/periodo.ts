@@ -34,6 +34,17 @@ export const PRESETS_DE_PERIODO = [
 ];
 
 /**
+ * O menu de período da Inadimplência: o de Contas mais "Próximos 7 dias" (hoje até hoje + 7),
+ * útil para promessas e vencimentos que vêm aí. Lista própria para não mexer no menu das
+ * outras telas; o "Personalizado" continua por último.
+ */
+export const PRESETS_DE_INADIMPLENCIA = [
+  ...PRESETS_DE_PERIODO.filter((p) => p.value !== "custom"),
+  { value: "proximos7", label: "Próximos 7 dias" },
+  ...PRESETS_DE_PERIODO.filter((p) => p.value === "custom"),
+];
+
+/**
  * O intervalo que cada preset de período impõe às duas datas.
  *
  * `null` para "custom": o preset personalizado não mexe nas datas que a
@@ -55,6 +66,12 @@ export function periodoDoPreset(preset: string, agora: Date): Periodo | null {
       const seteDiasAtras = new Date(hoje);
       seteDiasAtras.setDate(hoje.getDate() - 7);
       return { inicio: diaLocal(seteDiasAtras), fim: diaLocal(hoje) };
+    }
+    // Olha para a frente: hoje até hoje + 7, pelo dia local como os demais.
+    case "proximos7": {
+      const seteDiasDepois = new Date(hoje);
+      seteDiasDepois.setDate(hoje.getDate() + 7);
+      return { inicio: diaLocal(hoje), fim: diaLocal(seteDiasDepois) };
     }
     case "30dias": {
       const trintaDiasAtras = new Date(hoje);

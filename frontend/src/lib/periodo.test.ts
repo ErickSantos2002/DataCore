@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { periodoDoMes, periodoDoPreset } from "./periodo";
+import { PRESETS_DE_INADIMPLENCIA, PRESETS_DE_PERIODO, periodoDoMes, periodoDoPreset } from "./periodo";
 
 /**
  * A conta dos presets de período, compartilhada por Contas e pelas cinco telas
@@ -157,5 +157,25 @@ describe("periodoDoMes", () => {
       inicio: "2026-02-01",
       fim: "2026-02-28",
     });
+  });
+});
+
+describe("Próximos 7 dias", () => {
+  it("vai de hoje até hoje + 7, pelo dia local", () => {
+    expect(periodoDoPreset("proximos7", AGORA)).toEqual({ inicio: "2026-08-31", fim: "2026-09-07" });
+  });
+
+  it("atravessa a virada do ano", () => {
+    expect(periodoDoPreset("proximos7", new Date(2026, 11, 28, 12))).toEqual({
+      inicio: "2026-12-28", fim: "2027-01-04",
+    });
+  });
+
+  it("só a lista da Inadimplência oferece; a de Contas segue como estava", () => {
+    expect(PRESETS_DE_PERIODO.map((p) => p.value)).not.toContain("proximos7");
+    expect(PRESETS_DE_INADIMPLENCIA.map((p) => p.value)).toEqual(
+      expect.arrayContaining([...PRESETS_DE_PERIODO.map((p) => p.value), "proximos7"]),
+    );
+    expect(PRESETS_DE_INADIMPLENCIA.find((p) => p.value === "proximos7")?.label).toBe("Próximos 7 dias");
   });
 });

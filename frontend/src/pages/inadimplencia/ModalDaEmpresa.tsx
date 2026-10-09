@@ -29,7 +29,7 @@ function CorpoDoModal({ empresa, onFechar, onGravou }: Props) {
   const d = gravado ?? detalhe.dado;
 
   return (
-    <Modal open={empresa !== null} onClose={onFechar} size="2xl" title={d?.nome ?? "Empresa"} erro={erro ?? detalhe.erro}>
+    <Modal open={empresa !== null} onClose={onFechar} size="full" title={d?.nome ?? "Empresa"} erro={erro ?? detalhe.erro}>
       {!d ? <div className="flex justify-center py-12"><Spinner /></div> : (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-start justify-between gap-4">

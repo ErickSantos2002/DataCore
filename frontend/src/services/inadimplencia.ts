@@ -50,10 +50,23 @@ export interface EmpresaDaLista {
 
 export interface PaginaDeEmpresas { itens: EmpresaDaLista[]; total: number; limite: number; offset: number }
 
-export interface FiltrosDeEmpresas extends Params {
-  busca?: string;
+/** Qual data o período recorta: vencimento e emissão cortam títulos; promessa e contato, empresas. */
+export type TipoDeData = "vencimento" | "emissao" | "promessa" | "contato";
+/** "Sem contato há mais de": 7, 15 ou 30 dias, ou "nunca" contatado. */
+export type SemContato = "7" | "15" | "30" | "nunca";
+
+/** O recorte que a lista e os cards compartilham (a busca e a ordenação são só da lista). */
+export interface FiltrosDoResumo extends Params {
   status?: CodigoDeStatus[];
   faixa?: ChaveDeFaixa;
+  data_tipo?: TipoDeData;
+  data_inicio?: string;
+  data_fim?: string;
+  sem_contato?: SemContato;
+}
+
+export interface FiltrosDeEmpresas extends FiltrosDoResumo {
+  busca?: string;
   incluir_atraso?: boolean;
   ordenar_por?: string;
   direcao?: "asc" | "desc";
@@ -140,8 +153,8 @@ export interface NovoEvento {
 
 const url = (empresa: string) => `/inadimplencia/empresas/${encodeURIComponent(empresa)}`;
 
-export const fetchResumo = async () =>
-  (await api.get<ResumoDeInadimplencia>("/inadimplencia/resumo")).data;
+export const fetchResumo = async (params: FiltrosDoResumo = {}) =>
+  (await api.get<ResumoDeInadimplencia>("/inadimplencia/resumo", { params })).data;
 export const fetchEmpresas = async (params: FiltrosDeEmpresas) =>
   (await api.get<PaginaDeEmpresas>("/inadimplencia/empresas", { params })).data;
 export const fetchDetalhe = async (empresa: string) =>

@@ -1,5 +1,5 @@
 import type {
-  DetalheDaEmpresa, EmpresaDaLista, FiltrosDeEmpresas, Indicadores, NovoEvento, ResumoDeInadimplencia,
+  DetalheDaEmpresa, EmpresaDaLista, FiltrosDeEmpresas, FiltrosDoResumo, Indicadores, NovoEvento, ResumoDeInadimplencia,
 } from "../../services/inadimplencia";
 import type { ContaDaTela } from "../../services/notasapi";
 
@@ -13,6 +13,7 @@ export function criarServidorDeInadimplencia() {
     titulos: {} as Record<string, ContaDaTela[]>,
     indicadores: null as Indicadores | null,
     pedidos: [] as FiltrosDeEmpresas[],
+    pedidosResumo: [] as FiltrosDoResumo[],
     eventos: [] as { empresa: string; dados: NovoEvento }[],
     observacoes: [] as { empresa: string; texto: string }[],
     erroDeGravacao: null as string | null,
@@ -26,7 +27,10 @@ export function criarServidorDeInadimplencia() {
     Promise.reject({ response: { data: { detail: estado.erroDeGravacao } } });
 
   const servico = {
-    fetchResumo: () => responder(() => estado.resumo!),
+    fetchResumo: (f: FiltrosDoResumo = {}) => responder(() => {
+      estado.pedidosResumo.push(f);
+      return estado.resumo!;
+    }),
     fetchEmpresas: (f: FiltrosDeEmpresas) => responder(() => {
       estado.pedidos.push(f);
       let lista = [...estado.empresas];

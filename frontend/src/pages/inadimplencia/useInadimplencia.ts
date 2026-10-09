@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   fetchDetalhe, fetchEmpresas, fetchIndicadores, fetchResumo, fetchTitulos,
-  type DetalheDaEmpresa, type FiltrosDeEmpresas, type Indicadores,
+  type DetalheDaEmpresa, type FiltrosDeEmpresas, type FiltrosDoResumo, type Indicadores,
   type PaginaDeEmpresas, type ResumoDeInadimplencia,
 } from "../../services/inadimplencia";
 import type { ContaDaTela } from "../../services/notasapi";
@@ -38,8 +38,11 @@ function useBusca<T>(chave: string | null, buscar: () => Promise<T>, mensagem: s
   };
 }
 
-export function useResumo() {
-  return useBusca<ResumoDeInadimplencia>("resumo", fetchResumo, "Não foi possível carregar a inadimplência.");
+/** Os cards seguem o recorte; o anterior fica à mostra enquanto o novo carrega (a tela não pisca). */
+export function useResumo(filtros: FiltrosDoResumo) {
+  const chave = useMemo(() => JSON.stringify(filtros), [filtros]);
+  return useBusca<ResumoDeInadimplencia>(
+    chave, () => fetchResumo(JSON.parse(chave)), "Não foi possível carregar a inadimplência.", true);
 }
 
 export function useEmpresas(filtros: FiltrosDeEmpresas) {

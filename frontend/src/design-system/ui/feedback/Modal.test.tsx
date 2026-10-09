@@ -124,4 +124,12 @@ describe("Modal", () => {
     );
     expect(screen.getByLabelText("Nova senha")).toHaveValue("");
   });
+
+  it("o tamanho full e o mais largo (max-w-7xl) e os outros seguem como estavam", () => {
+    const { rerender } = render(<Modal open onClose={() => {}} title="T" size="full">x</Modal>);
+    expect(screen.getByRole("dialog").className).toContain("max-w-7xl");
+    rerender(<Modal open onClose={() => {}} title="T" size="2xl">x</Modal>);
+    expect(screen.getByRole("dialog").className).toContain("max-w-3xl");
+    expect(screen.getByRole("dialog").className).not.toContain("max-w-7xl");
+  });
 });

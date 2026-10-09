@@ -8,7 +8,8 @@ export interface ModalProps {
   onClose: () => void;
   /** Presente, desenha o cabeçalho com o × de fechar. */
   title?: string;
-  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  /** `full` é o mais largo (`max-w-7xl`), para o que traz tabela; em tela estreita segue a margem de 1rem. */
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "full";
   /**
    * Mensagem de erro DESTE diálogo — desenhada como `Alert` no topo do
    * corpo. Existe como prop, e não como um `<Alert>` que cada tela põe à
@@ -26,6 +27,7 @@ const SIZE_CLASSES: Record<NonNullable<ModalProps["size"]>, string> = {
   lg: "max-w-lg",
   xl: "max-w-2xl",
   "2xl": "max-w-3xl",
+  full: "max-w-7xl",
 };
 
 const FOCAVEIS_SELECTOR =
