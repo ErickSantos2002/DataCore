@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Inadimplencia from "./Inadimplencia";
 import { AuthContext } from "../context/AuthContext";
-import type { DetalheDaEmpresa, EmpresaDaLista, ResumoDeInadimplencia } from "../services/inadimplencia";
+import type { DetalheDaEmpresa, EmpresaDaLista, Indicadores, ResumoDeInadimplencia } from "../services/inadimplencia";
 import type { ContaDaTela } from "../services/notasapi";
 
 const falso = vi.hoisted(() => ({ atual: null as null | ReturnType<typeof import("./inadimplencia/servidorFalso").criarServidorDeInadimplencia> }));
@@ -19,6 +19,24 @@ const planilha = vi.hoisted(() => ({ linhas: [] as unknown[] }));
 vi.mock("../lib/planilha", () => ({
   baixarPlanilha: (abas: { linhas: unknown[] }[]) => { planilha.linhas = abas[0].linhas; },
 }));
+
+/** Dublê do recharts: em jsdom o gráfico mede 0x0 e não desenha; aqui cada ponto vira um item de lista. */
+vi.mock("recharts", () => {
+  const semDesenho = () => null;
+  type Dado = Record<string, unknown>;
+  type Props = { data?: Dado[]; children?: ReactNode };
+  return {
+    ResponsiveContainer: ({ children }: Props) => <div>{children}</div>,
+    BarChart: ({ data = [], children }: Props) => (
+      <div>
+        <ul>{data.map((d, i) => <li key={i}>{Object.entries(d).map(([k, v]) => `${k}=${String(v)}`).join(" ")}</li>)}</ul>
+        {children}
+      </div>
+    ),
+    Bar: semDesenho, Cell: semDesenho, XAxis: semDesenho, YAxis: semDesenho,
+    Tooltip: semDesenho, CartesianGrid: semDesenho, ReferenceLine: semDesenho,
+  };
+});
 
 function Molde({ children }: { children: ReactNode }) {
   return (
@@ -310,5 +328,55 @@ describe("Inadimplência — modal da empresa", () => {
     const enviado = falso.atual!.estado.eventos[0].dados.ocorrido_em;
     expect(enviado).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
     expect(new Date(enviado).getTime()).toBe(new Date(2026, 9, 9, 14, 30).getTime());
+  });
+});
+
+const INDICADORES: Indicadores = {
+  mensal: [
+    { mes: "2026-07", em_apuracao: false, valor: 1000, inadimplente: 100, titulos: 10, titulos_inadimplentes: 1, taxa: 0.1 },
+    { mes: "2026-08", em_apuracao: false, valor: 1000, inadimplente: 158, titulos: 10, titulos_inadimplentes: 2, taxa: 0.158 },
+    { mes: "2026-09", em_apuracao: true, valor: 300, inadimplente: 120, titulos: 3, titulos_inadimplentes: 1, taxa: 0.4 },
+  ],
+  anual: [
+    { ano: 2025, ano_corrente: false, valor: 10000, inadimplente: 840, titulos: 100, titulos_inadimplentes: 9, taxa: 0.084 },
+    { ano: 2026, ano_corrente: true, valor: 7500, inadimplente: 742, titulos: 80, titulos_inadimplentes: 8, taxa: 0.099 },
+  ],
+  total: { valor: 51000, inadimplente: 3417, titulos: 900, titulos_inadimplentes: 80, taxa: 0.067 },
+  desde: "2015-01-01",
+  ultimo_fechado: { mes: "2026-08", em_apuracao: false, valor: 1000, inadimplente: 158, titulos: 10, titulos_inadimplentes: 2, taxa: 0.158 },
+  media_12_meses: 0.129,
+};
+
+describe("Inadimplência — aba Indicadores", () => {
+  beforeEach(() => { falso.atual!.estado.indicadores = INDICADORES; });
+
+  async function abrirIndicadores() {
+    await montar();
+    fireEvent.click(screen.getByRole("tab", { name: "Indicadores" }));
+    await assentar(); await assentar();
+  }
+
+  it("cards: último mês fechado, média de 12 meses, ano corrente e total", async () => {
+    await abrirIndicadores();
+    expect(screen.getByText("Último mês fechado (ago/26)")).toBeInTheDocument();
+    expect(screen.getByText("15,8%")).toBeInTheDocument();
+    expect(screen.getByText("12,9%")).toBeInTheDocument();
+    expect(screen.getByText("Ano 2026 (até agora)")).toBeInTheDocument();
+    expect(screen.getByText(/pior que 2025/)).toBeInTheDocument();
+    expect(screen.getByText("Total — desde 2015")).toBeInTheDocument();
+  });
+
+  it("o mês em apuração aparece marcado e não como número fechado", async () => {
+    await abrirIndicadores();
+    expect(screen.getByText(/set\/26.*em apuração/)).toBeInTheDocument();
+  });
+
+  it("só busca os indicadores quando a aba é aberta", async () => {
+    const espiao = vi.spyOn(falso.atual!.servico, "fetchIndicadores");
+    await montar();
+    expect(espiao).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "Indicadores" }));
+    await assentar();
+    expect(espiao).toHaveBeenCalledTimes(1);
   });
 });
