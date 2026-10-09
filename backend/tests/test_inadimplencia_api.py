@@ -70,3 +70,45 @@ def test_parametros_invalidos_422(client, financeiro, params):
 
 def test_empresa_inexistente_404(client, financeiro, contas):
     assert client.get("/inadimplencia/empresas/99999999", headers=financeiro.headers).status_code == 404
+
+
+def _contato(**extra):
+    return {"ocorrido_em": datetime.now(timezone.utc).isoformat(), "canal": "telefone", **extra}
+
+
+def test_comum_nao_escreve(client, comum, contas):
+    contas(venceu_ha=40)
+    assert client.post("/inadimplencia/empresas/11111111/eventos", json=_contato(),
+                       headers=comum.headers).status_code == 403
+    assert client.put("/inadimplencia/empresas/11111111/observacao", json={"texto": "x"},
+                      headers=comum.headers).status_code == 403
+
+
+def test_registra_contato_com_promessa_e_grava_quem(client, financeiro, contas, engine):
+    from datetime import date, timedelta
+
+    contas(venceu_ha=40)
+    r = client.post("/inadimplencia/empresas/11111111/eventos", headers=financeiro.headers, json=_contato(
+        status_novo="promessa", anotacao="Paga na sexta",
+        promessa={"data": (date.today() + timedelta(days=3)).isoformat(), "valor": 500}))
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert corpo["ciclo"]["status"] == "promessa"
+    assert corpo["eventos"][0]["registrado_por"] == "ana"
+    assert corpo["eventos"][0]["anotacao"] == "Paga na sexta"
+
+
+def test_erro_de_regra_vira_422_com_mensagem(client, financeiro, contas):
+    contas(venceu_ha=40)
+    r = client.post("/inadimplencia/empresas/11111111/eventos", headers=financeiro.headers,
+                    json=_contato(status_novo="pago"))
+    assert r.status_code == 422
+    assert "sistema" in r.json()["detail"]
+
+
+def test_observacao(client, financeiro, contas):
+    contas(venceu_ha=40)
+    r = client.put("/inadimplencia/empresas/11111111/observacao", json={"texto": "Só boleto"},
+                   headers=financeiro.headers)
+    assert r.status_code == 200
+    assert r.json()["observacao"] == "Só boleto"

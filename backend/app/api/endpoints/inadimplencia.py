@@ -80,3 +80,32 @@ def titulos(empresa: str, db: Session = Depends(get_db), _u: Usuario = Depends(F
 @router.get("/indicadores", response_model=consultas.Indicadores)
 def indicadores(db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
     return consultas.indicadores(db, date.today())
+
+
+class TextoDaObservacao(BaseModel):
+    texto: str = Field("", max_length=4000)
+
+
+@router.post("/empresas/{empresa}/eventos", response_model=consultas.DetalheDaEmpresa)
+def registrar_evento(empresa: str, dados: cobranca.NovoEvento, db: Session = Depends(get_db),
+                     usuario: Usuario = Depends(FINANCEIRO)):
+    try:
+        cobranca.registrar_evento(db, date.today(), empresa, dados, usuario.username)
+        db.commit()
+    except cobranca.ErroDeCobranca as erro:
+        db.rollback()
+        raise HTTPException(erro.status_code, str(erro))
+    return _detalhe_ou_404(db, empresa)
+
+
+@router.put("/empresas/{empresa}/observacao", response_model=consultas.DetalheDaEmpresa)
+def gravar_observacao(empresa: str, dados: TextoDaObservacao, db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(FINANCEIRO)):
+    _detalhe_ou_404(db, empresa)
+    try:
+        cobranca.gravar_observacao(db, empresa, dados.texto, usuario.username)
+        db.commit()
+    except cobranca.ErroDeCobranca as erro:
+        db.rollback()
+        raise HTTPException(erro.status_code, str(erro))
+    return _detalhe_ou_404(db, empresa)
