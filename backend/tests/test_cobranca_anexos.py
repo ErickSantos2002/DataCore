@@ -88,10 +88,14 @@ def test_migracao_e_idempotente_e_da_permissao_sem_delete(engine):
             "SELECT has_table_privilege('app_teste', 'tiny.cobranca_anexos', 'SELECT'),"
             "       has_table_privilege('app_teste', 'tiny.cobranca_anexos', 'INSERT'),"
             "       has_table_privilege('app_teste', 'tiny.cobranca_anexos', 'UPDATE'),"
+            "       has_column_privilege('app_teste', 'tiny.cobranca_anexos', 'apagado_em', 'UPDATE'),"
+            "       has_column_privilege('app_teste', 'tiny.cobranca_anexos', 'apagado_por', 'UPDATE'),"
+            "       has_column_privilege('app_teste', 'tiny.cobranca_anexos', 'caminho', 'UPDATE'),"
             "       has_table_privilege('app_teste', 'tiny.cobranca_anexos', 'DELETE'),"
             "       has_sequence_privilege('app_teste', 'tiny.cobranca_anexos_id_seq', 'USAGE')"
         )).one()
-    assert p == (True, True, True, False, True)
+    # UPDATE só nas colunas de apagar: o app nunca reescreve o caminho de um anexo
+    assert p == (True, True, False, True, True, False, False, True)
 
 
 # ───────────────────────────────────────────────────────── registro devolve o id
@@ -199,6 +203,50 @@ def test_falha_ao_gravar_no_meio_apaga_o_que_ja_foi(client, financeiro, evento, 
     assert _linhas(engine) == [] and _arquivos_no_disco(pasta) == []
 
 
+def test_pedido_acima_do_teto_leva_413_antes_de_ler(client, financeiro, evento, pasta, engine, monkeypatch):
+    import importlib
+
+    # `app.api.endpoints.inadimplencia` como atributo é o router (reexportado no __init__)
+    rotas = importlib.import_module("app.api.endpoints.inadimplencia")
+    monkeypatch.setattr(rotas, "TETO_DO_PEDIDO", 1000)
+    r = _enviar(client, financeiro.headers, evento, ("a.png", PNG + b"\x00" * 2000, "image/png"))
+    assert r.status_code == 413
+    assert isinstance(r.json()["detail"], str)
+    assert _linhas(engine) == [] and _arquivos_no_disco(pasta) == []
+
+
+def test_pedido_sem_content_length_leva_411(client, financeiro, evento):
+    def corpo():
+        yield b"--x\r\n"
+
+    r = client.post(f"/inadimplencia/eventos/{evento}/anexos", content=corpo(),
+                    headers={**financeiro.headers, "content-type": "multipart/form-data; boundary=x"})
+    assert r.status_code == 411
+
+
+def test_seis_arquivos_param_no_parser_com_422_em_portugues(client, financeiro, evento, pasta, monkeypatch):
+    from app.services import anexos
+
+    chamado = []
+    monkeypatch.setattr(anexos, "enviar", lambda *a, **k: chamado.append(1))
+    r = _enviar(client, financeiro.headers, evento, *[(f"a{i}.png", PNG, "image/png") for i in range(6)])
+    assert r.status_code == 422
+    assert "5" in r.json()["detail"]
+    assert chamado == []  # o parser recusou antes de chegar ao serviço
+
+
+def test_remover_nao_sai_da_pasta_de_arquivos(pasta):
+    from app.services import anexos
+
+    fora = pasta.parent / f"fora-{pasta.name}.txt"
+    fora.write_text("não apagar")
+    try:
+        anexos.remover_arquivos([f"../{fora.name}", str(fora)])
+        assert fora.exists()
+    finally:
+        fora.unlink(missing_ok=True)
+
+
 def test_evento_inexistente_404(client, financeiro, evento):
     assert _enviar(client, financeiro.headers, 999999, ("a.png", PNG, "image/png")).status_code == 404
 
@@ -230,6 +278,13 @@ def test_comum_nao_envia_nem_baixa_nem_apaga(client, financeiro, comum, evento):
 def test_sem_token_leva_401(client, financeiro, evento):
     [a] = _enviar(client, financeiro.headers, evento, ("a.png", PNG, "image/png")).json()
     assert client.get(f"/inadimplencia/anexos/{a['id']}").status_code == 401
+
+
+def test_papel_e_conferido_antes_de_ler_o_corpo(client, comum, evento):
+    # 6 arquivos dariam 422 no parser: o 401/403 provar que o papel veio antes da leitura
+    seis = [(f"a{i}.png", PNG, "image/png") for i in range(6)]
+    assert _enviar(client, {}, evento, *seis).status_code == 401
+    assert _enviar(client, comum.headers, evento, *seis).status_code == 403
 
 
 # ───────────────────────────────────────────────────────── download

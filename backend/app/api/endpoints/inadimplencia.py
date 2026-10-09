@@ -8,10 +8,12 @@ from datetime import date, datetime
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile
+from starlette.exceptions import HTTPException as ErroDoStarlette
 
 from app.core import inadimplencia as consultas
 from app.core.inadimplencia import hoje_na_empresa
@@ -173,9 +175,35 @@ class AnexoCriado(BaseModel):
     enviado_em: datetime
 
 
+#: Teto do corpo inteiro do envio: 5 arquivos de 10 MB e folga para o envelope multipart.
+#: Checado no Content-Length ANTES de ler — o Starlette grava o multipart inteiro em
+#: arquivo temporário antes de a rota ver o primeiro byte, e não limita o tamanho de arquivo.
+TETO_DO_PEDIDO = anexos.MAXIMO_POR_EVENTO * anexos.TAMANHO_MAXIMO + 1024 * 1024
+
+
+async def _arquivos_do_pedido(request: Request):
+    """O campo `arquivos` do multipart, com teto de tamanho e de quantidade antes de ler."""
+    declarado = request.headers.get("content-length", "")
+    if not declarado.isdigit():
+        # sem Content-Length (chunked) não dá para saber o tamanho sem ler tudo
+        raise HTTPException(411, "Envio sem tamanho declarado (Content-Length).")
+    if int(declarado) > TETO_DO_PEDIDO:
+        raise HTTPException(413, f"O envio passa do limite de {anexos.MAXIMO_POR_EVENTO} arquivos de 10 MB.")
+    try:
+        form = await request.form(max_files=anexos.MAXIMO_POR_EVENTO, max_fields=anexos.MAXIMO_POR_EVENTO)
+    except ErroDoStarlette:
+        raise HTTPException(422, f"No máximo {anexos.MAXIMO_POR_EVENTO} anexos por contato.")
+    try:
+        yield [a for a in form.getlist("arquivos") if isinstance(a, UploadFile)]
+    finally:
+        await form.close()
+
+
 @router.post("/eventos/{evento_id}/anexos", response_model=List[AnexoCriado])
-def enviar_anexos(evento_id: int, arquivos: List[UploadFile] = File(...),
-                  db: Session = Depends(get_db), usuario: Usuario = Depends(FINANCEIRO)):
+def enviar_anexos(evento_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(FINANCEIRO),
+                  arquivos: List[UploadFile] = Depends(_arquivos_do_pedido)):
+    """Multipart com o campo `arquivos` repetido (1 a 5): JPG, PNG, WebP ou PDF, até 10 MB cada.
+    O corpo é lido por `_arquivos_do_pedido`, com teto, e não pelo `File()` do FastAPI."""
     recebidos = [anexos.ArquivoRecebido(nome=a.filename or "", conteudo=a.file) for a in arquivos]
     gravados: List[str] = []
     try:

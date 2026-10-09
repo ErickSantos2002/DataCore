@@ -119,9 +119,19 @@ def _gravar_no_disco(conferido: _Conferido, agora: datetime) -> str:
     return relativo.as_posix()
 
 
+def _dentro_da_pasta(caminho: str) -> Optional[Path]:
+    """O arquivo do anexo, resolvido; None se o caminho sair do ARQUIVOS_DIR (`..`, absoluto,
+    link). O caminho é nosso, mas o banco não é só nosso: ninguém apaga nem serve fora daqui."""
+    base = pasta_de_arquivos().resolve()
+    arquivo = (base / caminho).resolve()
+    return arquivo if arquivo.is_relative_to(base) else None
+
+
 def remover_arquivos(caminhos: Sequence[str]) -> None:
     for caminho in caminhos:
-        (pasta_de_arquivos() / caminho).unlink(missing_ok=True)
+        arquivo = _dentro_da_pasta(caminho)
+        if arquivo is not None:
+            arquivo.unlink(missing_ok=True)
 
 
 def enviar(db: Session, evento_id: int, arquivos: Sequence[ArquivoRecebido], usuario: str
@@ -174,10 +184,8 @@ def anexo_para_baixar(db: Session, anexo_id: int) -> Tuple[Path, dict]:
     ), {"id": anexo_id}).mappings().first()
     if linha is None:
         raise ErroDeCobranca("Anexo não encontrado.", 404)
-    base = pasta_de_arquivos().resolve()
-    arquivo = (base / linha["caminho"]).resolve()
-    # o caminho é nosso, mas o banco não é só nosso: não sair do ARQUIVOS_DIR
-    if not arquivo.is_relative_to(base) or not arquivo.is_file():
+    arquivo = _dentro_da_pasta(linha["caminho"])
+    if arquivo is None or not arquivo.is_file():
         raise ErroDeCobranca("O arquivo deste anexo não está mais no servidor.", 404)
     return arquivo, dict(linha)
 

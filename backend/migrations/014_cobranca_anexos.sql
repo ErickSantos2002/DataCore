@@ -25,8 +25,9 @@ COMMENT ON COLUMN tiny.cobranca_anexos.caminho IS
 COMMENT ON COLUMN tiny.cobranca_anexos.tipo IS
     'MIME tirado da assinatura do conteúdo, não da extensão nem do content-type do pedido.';
 
--- Mesmo esquema da 013: quem escreve em tiny.configuracoes escreve aqui (sem DELETE —
--- apagar é marcar); quem só lê lá só lê aqui.
+-- Mesmo esquema da 013: quem escreve em tiny.configuracoes escreve aqui; quem só lê lá
+-- só lê aqui. Sem DELETE (apagar é marcar) e UPDATE só nas colunas de apagar: o app
+-- nunca reescreve o caminho, então uma injeção não o aponta para fora da pasta.
 DO $$
 DECLARE r record;
 BEGIN
@@ -35,7 +36,10 @@ BEGIN
          WHERE NOT rolsuper AND rolname NOT LIKE 'pg\_%'
     LOOP
         IF has_table_privilege(r.rolname, 'tiny.configuracoes', 'UPDATE') THEN
-            EXECUTE format('GRANT SELECT, INSERT, UPDATE ON tiny.cobranca_anexos TO %I', r.rolname);
+            -- REVOKE antes: rodar de novo por cima de um UPDATE na tabela inteira o desfaz
+            EXECUTE format('REVOKE UPDATE ON tiny.cobranca_anexos FROM %I', r.rolname);
+            EXECUTE format('GRANT SELECT, INSERT ON tiny.cobranca_anexos TO %I', r.rolname);
+            EXECUTE format('GRANT UPDATE (apagado_em, apagado_por) ON tiny.cobranca_anexos TO %I', r.rolname);
             EXECUTE format('GRANT USAGE ON SEQUENCE tiny.cobranca_anexos_id_seq TO %I', r.rolname);
         ELSIF has_table_privilege(r.rolname, 'tiny.configuracoes', 'SELECT') THEN
             EXECUTE format('GRANT SELECT ON tiny.cobranca_anexos TO %I', r.rolname);
