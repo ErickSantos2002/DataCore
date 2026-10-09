@@ -280,4 +280,35 @@ describe("Inadimplência — modal da empresa", () => {
     expect(within(modal).getByRole("alert")).toHaveTextContent("A data prometida já passou.");
     expect(within(modal).getByLabelText("Anotação")).toHaveValue("Texto longo");
   });
+
+  it.each(["abc", "0"])("valor prometido inválido (%s) avisa e não grava", async (texto) => {
+    const modal = await formulario();
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "promessa" } });
+    fireEvent.change(within(modal).getByLabelText("Data prometida"), { target: { value: "2099-01-10" } });
+    fireEvent.change(within(modal).getByLabelText("Valor prometido"), { target: { value: texto } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    expect(falso.atual!.estado.eventos).toHaveLength(0);
+    expect(within(modal).getByText("Valor prometido inválido.")).toBeInTheDocument();
+  });
+
+  it("valor prometido vazio segue com valor nulo", async () => {
+    const modal = await formulario();
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "promessa" } });
+    fireEvent.change(within(modal).getByLabelText("Data prometida"), { target: { value: "2099-01-10" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    expect(falso.atual!.estado.eventos[0].dados.promessa).toMatchObject({ data: "2099-01-10", valor: null });
+  });
+
+  it("ocorrido_em vai com fuso e representa o instante digitado", async () => {
+    const modal = await formulario();
+    fireEvent.change(within(modal).getByLabelText("Quando"), { target: { value: "2026-10-09T14:30" } });
+    fireEvent.change(within(modal).getByLabelText("Canal"), { target: { value: "telefone" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Gravar" }));
+    await assentar();
+    const enviado = falso.atual!.estado.eventos[0].dados.ocorrido_em;
+    expect(enviado).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+    expect(new Date(enviado).getTime()).toBe(new Date(2026, 9, 9, 14, 30).getTime());
+  });
 });

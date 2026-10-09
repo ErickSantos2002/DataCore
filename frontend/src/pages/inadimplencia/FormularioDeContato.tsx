@@ -44,6 +44,8 @@ export function FormularioDeContato({ detalhe, onGravou, onErro, onCancelar }: {
   const gravar = async () => {
     if (!canal && !status) { setAviso("Escolha o canal do contato ou um novo status."); return; }
     if (status === "promessa" && !data) { setAviso("Informe a data prometida."); return; }
+    const numero = converterParaNumero(valor);
+    if (status === "promessa" && valor.trim() && !(numero > 0)) { setAviso("Valor prometido inválido."); return; }
     const instante = new Date(quando);
     if (Number.isNaN(instante.getTime())) { setAviso("Informe quando o contato aconteceu."); return; }
     setAviso(null);
@@ -55,7 +57,7 @@ export function FormularioDeContato({ detalhe, onGravou, onErro, onCancelar }: {
         filial_cnpj: filial || null,
         status_novo: status || null,
         promessa: status === "promessa"
-          ? { data, valor: valor ? converterParaNumero(valor) : null, condicoes: condicoes.trim() || null }
+          ? { data, valor: valor.trim() ? numero : null, condicoes: condicoes.trim() || null }
           : null,
         anotacao: anotacao.trim() || null,
       }));
