@@ -111,7 +111,7 @@ export function AbaCobranca() {
             ))}
           </div>
 
-          <BarraDeFaixas faixas={r.faixas} total={r.total_vencido} ativa={faixa}
+          <BarraDeFaixas faixas={r.faixas} total={r.faixas.reduce((soma, f) => soma + f.valor, 0)} ativa={faixa}
             onEscolher={(f) => mudou(setFaixa)(faixa === f ? null : f)} />
         </>
       ) : null}
