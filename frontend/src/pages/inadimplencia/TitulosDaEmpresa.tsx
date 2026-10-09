@@ -17,18 +17,19 @@ export function TitulosDaEmpresa({ titulos, hoje }: { titulos: ContaDaTela[]; ho
   const aVencer = titulos.filter((t) => diasDeAtraso(t.vencimento, hoje) === 0);
   const porFilial = new Map<string, ContaDaTela[]>();
   for (const t of vencidos) {
-    const chave = t.cliente_cpf_cnpj ?? t.cliente_nome ?? "";
+    // a mesma filial pode vir com o CNPJ pontuado e sem pontuação: agrupa pelos dígitos
+    const chave = (t.cliente_cpf_cnpj ?? "").replace(/\D/g, "") || (t.cliente_nome ?? "");
     porFilial.set(chave, [...(porFilial.get(chave) ?? []), t]);
   }
-  const grupos = [...porFilial.values()].sort(
-    (a, b) => b.reduce((s, t) => s + t.saldo, 0) - a.reduce((s, t) => s + t.saldo, 0),
+  const grupos = [...porFilial.entries()].sort(
+    (a, b) => b[1].reduce((s, t) => s + t.saldo, 0) - a[1].reduce((s, t) => s + t.saldo, 0),
   );
 
   if (titulos.length === 0) return <p className="py-8 text-center text-conteudo-muted">Nenhum título em aberto.</p>;
   return (
     <div className="flex flex-col gap-6">
-      {grupos.map((g) => (
-        <Grupo key={g[0].cliente_cpf_cnpj ?? g[0].cliente_nome} titulo={`${g[0].cliente_nome} · ${g[0].cliente_cpf_cnpj ?? ""}`} titulos={g} hoje={hoje} />
+      {grupos.map(([chave, g]) => (
+        <Grupo key={chave} titulo={`${g[0].cliente_nome} · ${g[0].cliente_cpf_cnpj ?? ""}`} titulos={g} hoje={hoje} />
       ))}
       {aVencer.length ? <Grupo titulo="A vencer" titulos={aVencer} hoje={hoje} /> : null}
     </div>

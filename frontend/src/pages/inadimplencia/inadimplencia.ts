@@ -1,5 +1,5 @@
 import type { BadgeProps } from "../../design-system/ui/core/Badge";
-import { dataDeCalendario } from "../../lib/datas";
+import { dataDeCalendario, diaLocal } from "../../lib/datas";
 import type { ChaveDeFaixa, CodigoDeStatus, EmpresaDaLista } from "../../services/inadimplencia";
 
 /**
@@ -84,7 +84,8 @@ export function linhasDaPlanilhaDeEmpresas(empresas: EmpresaDaLista[]): Record<s
     "Maior atraso (dias)": e.maior_atraso,
     Status: e.status ? STATUS[e.status].rotulo : "",
     "Próxima data": e.proxima_data ? dataDeCalendario(e.proxima_data) : "",
-    "Último contato": e.ultimo_contato ? dataDeCalendario(e.ultimo_contato) : "",
+    // instante com fuso: o dia é o de quem olha, não o do UTC (como a coluna "há quantos dias")
+    "Último contato": e.ultimo_contato ? dataDeCalendario(diaLocal(new Date(e.ultimo_contato))) : "",
   }));
 }
 

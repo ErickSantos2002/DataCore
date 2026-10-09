@@ -142,6 +142,40 @@ describe("Inadimplência — aba Cobrança", () => {
     expect(planilha.linhas).toHaveLength(2);
   });
 
+  it("digitar na busca mantém a lista anterior na tela enquanto carrega", async () => {
+    await montar();
+    expect(screen.getByRole("button", { name: "Alfa Ltda" })).toBeInTheDocument();
+    falso.atual!.estado.modo = "pendente";
+    fireEvent.change(screen.getByLabelText("Pesquisar empresas"), { target: { value: "be" } });
+    await assentar();
+    expect(screen.getByRole("button", { name: "Alfa Ltda" })).toBeInTheDocument();
+    expect(screen.queryByText("Nenhuma empresa encontrada.")).toBeNull();
+  });
+
+  it("card de status liga também as empresas só em atraso", async () => {
+    await montar();
+    fireEvent.click(screen.getByRole("button", { name: "Filtrar: Sem contato" }));
+    await assentar();
+    expect(ultimoPedido()).toMatchObject({ status: ["sem_contato"], incluir_atraso: true });
+  });
+
+  it("card de promessas filtra promessa e ordena pela data prometida, a mais próxima primeiro", async () => {
+    await montar();
+    fireEvent.click(screen.getByRole("button", { name: "Filtrar: Promessas nos próximos 7 dias" }));
+    await assentar();
+    expect(ultimoPedido()).toMatchObject({
+      status: ["promessa"], incluir_atraso: true, ordenar_por: "proxima_data", direcao: "asc",
+    });
+  });
+
+  it("o filtro de Status não oferece Pago (a lista só tem ciclos abertos)", async () => {
+    await montar();
+    fireEvent.click(screen.getByRole("button", { name: /^Status/, expanded: false }));
+    const grupo = screen.getByRole("group", { name: "Status" });
+    expect(within(grupo).getByRole("checkbox", { name: "Promessa de pagamento" })).toBeInTheDocument();
+    expect(within(grupo).queryByRole("checkbox", { name: "Pago" })).toBeNull();
+  });
+
   it("falha de carregamento avisa em bloco", async () => {
     falso.atual!.estado.modo = "falha";
     await montar();
@@ -231,6 +265,31 @@ describe("Inadimplência — modal da empresa", () => {
     await assentar();
     expect(falso.atual!.estado.observacoes).toEqual([{ empresa: "11111111", texto: "Pagam dia 10" }]);
     expect(within(modal).getByText("Pagam dia 10")).toBeInTheDocument();
+  });
+
+  it("o que foi digitado no contato sobrevive à troca de aba", async () => {
+    const modal = await abrir();
+    fireEvent.click(within(modal).getByRole("button", { name: "Registrar contato" }));
+    fireEvent.change(within(modal).getByLabelText("Anotação"), { target: { value: "Ligar amanhã" } });
+    fireEvent.click(within(modal).getByRole("tab", { name: "Títulos" }));
+    fireEvent.click(within(modal).getByRole("tab", { name: "Cobrança" }));
+    expect(within(modal).getByLabelText("Anotação")).toHaveValue("Ligar amanhã");
+  });
+
+  it("a mesma filial com CNPJ pontuado e sem pontuação vira um grupo só", async () => {
+    falso.atual!.estado.titulos = { "11111111": [
+      titulo({ id: 1 }),
+      titulo({ id: 2, cliente_cpf_cnpj: "11111111000111" }),
+    ] };
+    const modal = await abrir();
+    expect(within(modal).getAllByRole("heading", { level: 3 })).toHaveLength(1);
+  });
+
+  it("o campo Condições limita a 1000 caracteres", async () => {
+    const modal = await abrir();
+    fireEvent.click(within(modal).getByRole("button", { name: "Registrar contato" }));
+    fireEvent.change(within(modal).getByLabelText("Novo status"), { target: { value: "promessa" } });
+    expect(within(modal).getByLabelText("Condições")).toHaveAttribute("maxlength", "1000");
   });
 
   async function formulario() {

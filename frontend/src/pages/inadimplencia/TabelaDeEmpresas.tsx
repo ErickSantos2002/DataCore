@@ -32,6 +32,8 @@ export interface TabelaDeEmpresasProps {
   onExportar: () => void;
   onAbrir: (empresa: string) => void;
   hoje: Date;
+  /** Há busca em curso: a lista anterior fica na tela e o vazio não aparece. */
+  carregando?: boolean;
 }
 
 /** Até 30 dias é atraso (âmbar); depois disso é inadimplência (vermelho). */
@@ -45,7 +47,7 @@ function SeloDeAtraso({ dias }: { dias: number }) {
  * Não guarda estado — a aba é dona do filtro, da ordenação e da página.
  */
 export function TabelaDeEmpresas(props: TabelaDeEmpresasProps) {
-  const { empresas, total, pagina, onPagina, pesquisa, onPesquisar, ordenacao, onOrdenar, onExportar, onAbrir, hoje } = props;
+  const { empresas, total, pagina, onPagina, pesquisa, onPesquisar, ordenacao, onOrdenar, onExportar, onAbrir, hoje, carregando = false } = props;
   const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
   return (
     <Card padding="none">
@@ -101,7 +103,7 @@ export function TabelaDeEmpresas(props: TabelaDeEmpresasProps) {
 
         <TableBody>
           {empresas.length === 0 ? (
-            <TableEmpty colSpan={COLUNAS.length} message="Nenhuma empresa encontrada." />
+            <TableEmpty colSpan={COLUNAS.length} message={carregando ? "Carregando..." : "Nenhuma empresa encontrada."} />
           ) : (
             empresas.map((e) => (
               <TableRow key={e.empresa} clickable onClick={() => onAbrir(e.empresa)}>

@@ -83,7 +83,7 @@ export function FormularioDeContato({ detalhe, onGravou, onErro, onCancelar }: {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Input label="Data prometida" type="date" value={data} onChange={(e) => setData(e.target.value)} />
           <Input label="Valor prometido" inputMode="decimal" placeholder="opcional" value={valor} onChange={(e) => setValor(e.target.value)} />
-          <Input label="Condições" placeholder="ex.: metade agora, metade em 30 dias" value={condicoes} onChange={(e) => setCondicoes(e.target.value)} />
+          <Input label="Condições" maxLength={1000} placeholder="ex.: metade agora, metade em 30 dias" value={condicoes} onChange={(e) => setCondicoes(e.target.value)} />
         </div>
       ) : null}
       <Textarea label="Anotação" rows={3} maxLength={4000} value={anotacao} onChange={(e) => setAnotacao(e.target.value)}

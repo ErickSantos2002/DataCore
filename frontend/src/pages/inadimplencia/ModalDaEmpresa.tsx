@@ -46,11 +46,17 @@ function CorpoDoModal({ empresa, onFechar, onGravou }: Props) {
             </div>
             <div className="flex items-center gap-2">
               {d.ciclo ? <Badge variant={STATUS[d.ciclo.status].variante}>{STATUS[d.ciclo.status].rotulo}</Badge> : null}
-              <Button onClick={() => { setRegistrando(true); setAba("cobranca"); }}>Registrar contato</Button>
+              <Button onClick={() => setRegistrando(true)}>Registrar contato</Button>
             </div>
           </div>
 
           <Observacao detalhe={d} onGravou={gravou} onErro={setErro} />
+
+          {/* fora das abas: TabsContent desmonta ao trocar de aba e o que foi digitado se perdia */}
+          {registrando ? (
+            <FormularioDeContato detalhe={d} onGravou={(n) => { gravou(n); setRegistrando(false); }}
+              onErro={setErro} onCancelar={() => setRegistrando(false)} />
+          ) : null}
 
           <Tabs value={aba} onChange={setAba}>
             <TabsList>
@@ -61,10 +67,6 @@ function CorpoDoModal({ empresa, onFechar, onGravou }: Props) {
               {titulos.dado ? <TitulosDaEmpresa titulos={titulos.dado} hoje={hoje} /> : <Spinner />}
             </TabsContent>
             <TabsContent value="cobranca" className="mt-4 flex flex-col gap-6">
-              {registrando ? (
-                <FormularioDeContato detalhe={d} onGravou={(n) => { gravou(n); setRegistrando(false); }}
-                  onErro={setErro} onCancelar={() => setRegistrando(false)} />
-              ) : null}
               <LinhaDoTempo eventos={d.eventos} ciclo={d.ciclo} anteriores={d.ciclos_anteriores} />
             </TabsContent>
           </Tabs>

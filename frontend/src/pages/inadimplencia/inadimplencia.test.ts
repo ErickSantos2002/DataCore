@@ -43,6 +43,19 @@ describe("inadimplência — regra pura", () => {
     }
   });
 
+  it("planilha: último contato pelo dia de quem olha, não pelo UTC", () => {
+    const [linha] = linhasDaPlanilhaDeEmpresas([
+      {
+        empresa: "11111111", nome: "Alfa", documento: null, filiais: 1, titulos: 1, valor_devido: 1,
+        valor_inadimplente: 1, maior_atraso: 31, status: "promessa", proxima_data: null,
+        ultimo_contato: "2026-10-02T01:30:00Z",
+      },
+    ]);
+    // 01h30 UTC ainda é 22h30 do dia 1 em Brasília (UTC-3)
+    const emBrasilia = new Date("2026-10-02T01:30:00Z").getTimezoneOffset() === 180;
+    expect(linha["Último contato"]).toBe(emBrasilia ? "01/10/2026" : "02/10/2026");
+  });
+
   it("planilha: dinheiro como número, status pelo rótulo", () => {
     const [linha] = linhasDaPlanilhaDeEmpresas([
       {

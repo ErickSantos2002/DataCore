@@ -41,6 +41,17 @@ export function AbaCobranca() {
   /** Mudar qualquer filtro volta para a página 1. */
   const mudou = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPagina(1); };
 
+  /**
+   * Os contadores dos cards incluem empresas só em atraso, então o card liga o "incluir atraso"
+   * também; o de promessas lista pela data prometida, a mais próxima primeiro.
+   */
+  const escolherCard = (s: CodigoDeStatus) => {
+    setStatus([s]);
+    setIncluirAtraso(true);
+    if (s === "promessa") setOrdenacao({ campo: "proxima_data", direcao: "asc" });
+    setPagina(1);
+  };
+
   const exportar = useCallback(async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -78,7 +89,7 @@ export function AbaCobranca() {
               ["Promessas quebradas", r.promessas_quebradas, "quebrada"],
               ["Em negociação", r.em_negociacao, "negociacao"],
             ] as const).map(([rotulo, n, s]) => (
-              <button key={s} type="button" className="text-left" onClick={() => mudou(setStatus)([s])} aria-label={`Filtrar: ${rotulo}`}>
+              <button key={s} type="button" className="text-left" onClick={() => escolherCard(s)} aria-label={`Filtrar: ${rotulo}`}>
                 <KpiCard label={rotulo} value={n} tone={s === "quebrada" && n > 0 ? "perigo" : "neutro"} />
               </button>
             ))}
@@ -93,7 +104,7 @@ export function AbaCobranca() {
         <div className="grid w-full grid-cols-1 items-end gap-4 md:grid-cols-3">
           <MultiSelect
             rotulo="Status"
-            opcoes={Object.entries(STATUS).map(([valor, s]) => ({ valor, rotulo: s.rotulo }))}
+            opcoes={Object.entries(STATUS).filter(([valor]) => valor !== "pago").map(([valor, s]) => ({ valor, rotulo: s.rotulo }))}
             selecionados={status}
             onChange={(v) => mudou(setStatus)(v as CodigoDeStatus[])}
             placeholder="Todos"
@@ -118,6 +129,7 @@ export function AbaCobranca() {
         onExportar={exportar}
         onAbrir={setAberta}
         hoje={hoje}
+        carregando={lista.carregando}
       />
 
       <ModalDaEmpresa empresa={aberta} onFechar={() => setAberta(null)} onGravou={() => { resumo.recarregar(); lista.recarregar(); }} />

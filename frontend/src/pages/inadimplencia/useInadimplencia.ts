@@ -7,8 +7,12 @@ import {
 } from "../../services/inadimplencia";
 import type { ContaDaTela } from "../../services/notasapi";
 
-/** Busca por chave: troca a chave, busca de novo; `recarregar` força. */
-function useBusca<T>(chave: string | null, buscar: () => Promise<T>, mensagem: string) {
+/**
+ * Busca por chave: troca a chave, busca de novo; `recarregar` força.
+ * Com `manterAnterior`, o último dado continua à mostra enquanto a nova chave carrega
+ * (a lista não pisca "vazia" a cada tecla); `carregando` segue dizendo que há busca em curso.
+ */
+function useBusca<T>(chave: string | null, buscar: () => Promise<T>, mensagem: string, manterAnterior = false) {
   const [estado, setEstado] = useState<{ chave: string; dado: T | null; erro: string | null } | null>(null);
   const [versao, setVersao] = useState(0);
 
@@ -27,7 +31,7 @@ function useBusca<T>(chave: string | null, buscar: () => Promise<T>, mensagem: s
   }, [chave, versao]);
 
   return {
-    dado: estado?.chave === chave ? estado.dado : null,
+    dado: estado && (manterAnterior || estado.chave === chave) ? estado.dado : null,
     carregando: chave !== null && estado?.chave !== chave,
     erro: estado?.chave === chave ? estado.erro : null,
     recarregar: useCallback(() => setVersao((v) => v + 1), []),
@@ -40,7 +44,7 @@ export function useResumo() {
 
 export function useEmpresas(filtros: FiltrosDeEmpresas) {
   const chave = useMemo(() => JSON.stringify(filtros), [filtros]);
-  return useBusca<PaginaDeEmpresas>(chave, () => fetchEmpresas(JSON.parse(chave)), "Não foi possível carregar a lista.");
+  return useBusca<PaginaDeEmpresas>(chave, () => fetchEmpresas(JSON.parse(chave)), "Não foi possível carregar a lista.", true);
 }
 
 export function useDetalhe(empresa: string | null) {
