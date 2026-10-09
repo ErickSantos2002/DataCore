@@ -238,7 +238,7 @@ def test_data_sem_fuso_vale_horario_de_brasilia(db, contas):
     from app.services.cobranca import NovoEvento, registrar_evento
 
     contas(venceu_ha=40)
-    naive = datetime.now() - timedelta(hours=2)
+    naive = datetime.now(ZoneInfo("America/Sao_Paulo")).replace(tzinfo=None) - timedelta(hours=2)
     evento = NovoEvento(ocorrido_em=naive, canal="telefone")
     assert evento.ocorrido_em.tzinfo is not None
     registrar_evento(db, HOJE, "11111111", evento, "erick")
