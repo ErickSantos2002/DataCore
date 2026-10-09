@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Inadimplencia from "./Inadimplencia";
+import { textoDoTooltip } from "./inadimplencia/AbaIndicadores";
 import { AuthContext } from "../context/AuthContext";
 import type { DetalheDaEmpresa, EmpresaDaLista, Indicadores, ResumoDeInadimplencia } from "../services/inadimplencia";
 import type { ContaDaTela } from "../services/notasapi";
@@ -378,5 +379,36 @@ describe("Inadimplência — aba Indicadores", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Indicadores" }));
     await assentar();
     expect(espiao).toHaveBeenCalledTimes(1);
+  });
+
+  function comAno(taxaAtual: number | null, taxaAnterior: number | null): Indicadores {
+    return { ...INDICADORES, anual: [
+      { ...INDICADORES.anual[0], taxa: taxaAnterior },
+      { ...INDICADORES.anual[1], taxa: taxaAtual },
+    ] };
+  }
+
+  it.each([
+    [0.099, 0.084, /▲ pior que 2025 \(8,4%\)/],
+    [0.07, 0.084, /▼ melhor que 2025 \(8,4%\)/],
+    [0.0991, 0.0994, /igual a 2025 \(9,9%\)/],
+  ])("compara com o ano anterior (%s vs %s)", async (atual, anterior, esperado) => {
+    falso.atual!.estado.indicadores = comAno(atual, anterior);
+    await abrirIndicadores();
+    expect(screen.getByText(esperado)).toBeInTheDocument();
+  });
+
+  it("sem taxa no ano anterior, não mostra comparação", async () => {
+    falso.atual!.estado.indicadores = comAno(0.099, null);
+    await abrirIndicadores();
+    expect(screen.queryByText(/pior que|melhor que|igual a/)).not.toBeInTheDocument();
+  });
+
+  it("tooltip usa os rótulos da spec", () => {
+    const texto = textoDoTooltip(INDICADORES.mensal[2]);
+    expect(texto).toContain("Taxa: 40,0%");
+    expect(texto).toContain("Valor vencido: ");
+    expect(texto).toContain("Não pago em 30 dias: ");
+    expect(texto).toContain("(em apuração)");
   });
 });

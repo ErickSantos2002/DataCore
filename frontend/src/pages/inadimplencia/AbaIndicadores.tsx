@@ -7,6 +7,22 @@ import { formatarMoeda } from "../contas/contas";
 import { formatarPercentual, nomeDoMes } from "./inadimplencia";
 import { useIndicadores } from "./useInadimplencia";
 
+/** Compara na precisão exibida (0,1 p.p.); sem taxa dos dois lados, não há comparação. */
+export function comparacaoComAnoAnterior(atual: number | null, anterior: number | null, ano: number): string | undefined {
+  if (atual === null || anterior === null) return undefined;
+  const a = Math.round(atual * 1000);
+  const b = Math.round(anterior * 1000);
+  const rotulo = `${ano} (${formatarPercentual(anterior)})`;
+  if (a > b) return `▲ pior que ${rotulo}`;
+  if (a < b) return `▼ melhor que ${rotulo}`;
+  return `= igual a ${rotulo}`;
+}
+
+/** Texto do tooltip do gráfico mensal, com os rótulos da spec. */
+export function textoDoTooltip(m: MesDeTaxa): string {
+  return `Taxa: ${formatarPercentual(m.taxa)} · Valor vencido: ${formatarMoeda(m.valor)} · Não pago em 30 dias: ${formatarMoeda(m.inadimplente)}${m.em_apuracao ? " (em apuração)" : ""}`;
+}
+
 /**
  * A taxa de safra: de tudo que venceu, quanto não foi pago em até 30 dias.
  * Mês em apuração = ainda tem vencimento que não completou 30 dias.
@@ -19,7 +35,6 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
 
   const anoAtual = i.anual.find((a) => a.ano_corrente);
   const anoAnterior = anoAtual ? i.anual.find((a) => a.ano === anoAtual.ano - 1) : undefined;
-  const pior = anoAtual && anoAnterior && (anoAtual.taxa ?? 0) > (anoAnterior.taxa ?? 0);
   const dados = i.mensal.map((m) => ({ ...m, rotulo: nomeDoMes(m.mes), pct: (m.taxa ?? 0) * 100 }));
   const maxAno = Math.max(...i.anual.map((a) => a.taxa ?? 0), i.total.taxa ?? 0, 0.01);
 
@@ -33,7 +48,7 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
         <KpiCard label="Média dos últimos 12 meses" value={formatarPercentual(i.media_12_meses)} tone="acao" />
         {anoAtual ? (
           <KpiCard label={`Ano ${anoAtual.ano} (até agora)`} value={formatarPercentual(anoAtual.taxa)} tone="perigo"
-            note={anoAnterior ? `${pior ? "▲ pior que" : "▼ melhor que"} ${anoAnterior.ano} (${formatarPercentual(anoAnterior.taxa)})` : undefined} />
+            note={anoAnterior ? comparacaoComAnoAnterior(anoAtual.taxa, anoAnterior.taxa, anoAnterior.ano) : undefined} />
         ) : null}
         <KpiCard label={`Total — desde ${i.desde?.slice(0, 4) ?? "—"}`} value={formatarPercentual(i.total.taxa)}
           note={`${formatarMoeda(i.total.inadimplente)} de ${formatarMoeda(i.total.valor)}`} />
@@ -51,9 +66,7 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke={chartTheme.grid.stroke} />
                 <XAxis dataKey="rotulo" tick={{ fill: chartTheme.axis.stroke, fontSize: 12 }} axisLine={{ stroke: chartTheme.grid.stroke }} />
                 <YAxis tickFormatter={(v: number) => `${v}%`} tick={{ fill: chartTheme.axis.stroke, fontSize: 12 }} axisLine={{ stroke: chartTheme.grid.stroke }} />
-                <Tooltip contentStyle={chartTheme.tooltip} formatter={(_v, _n, p: { payload?: MesDeTaxa }) => p.payload
-                  ? [`${formatarPercentual(p.payload.taxa)} · ${formatarMoeda(p.payload.inadimplente)} de ${formatarMoeda(p.payload.valor)}${p.payload.em_apuracao ? " (em apuração)" : ""}`, "Taxa"]
-                  : ""} />
+                <Tooltip contentStyle={chartTheme.tooltip} formatter={(_v, _n, p: { payload?: MesDeTaxa }) => [p.payload ? textoDoTooltip(p.payload) : "", ""]} />
                 {i.media_12_meses !== null ? <ReferenceLine y={i.media_12_meses * 100} strokeDasharray="6 4" stroke="var(--action)" label="média 12 meses" /> : null}
                 <Bar dataKey="pct" radius={[3, 3, 0, 0]}>
                   {dados.map((m) => <Cell key={m.mes} fill={m.em_apuracao ? "var(--color-slate-300)" : "var(--color-danger-500)"} />)}
