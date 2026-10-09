@@ -4,6 +4,7 @@ Nenhuma função aqui faz commit — quem chama decide (a rota, ou o job de cont
 Spec: docs/superpowers/specs/2026-10-09-inadimplencia-design.md
 """
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -21,6 +22,7 @@ STATUS_DO_SISTEMA = {"sem_contato", "quebrada", "pago"}
 STATUS_MANUAIS = {"em_contato", "respondeu", "promessa", "negociacao", "contestado", "juridico", "perda"}
 CANAIS = {"telefone", "email", "whatsapp", "presencial", "outro"}
 SISTEMA = "sistema"
+FUSO_DA_EMPRESA = ZoneInfo("America/Sao_Paulo")
 
 
 class ErroDeCobranca(Exception):
@@ -42,6 +44,12 @@ class NovoEvento(BaseModel):
     status_novo: Optional[str] = None
     promessa: Optional[Promessa] = None
     anotacao: Optional[str] = None
+
+    @field_validator("ocorrido_em")
+    @classmethod
+    def _com_fuso(cls, v):
+        # sem fuso na entrada, vale o horário de Brasília (o da empresa)
+        return v.replace(tzinfo=FUSO_DA_EMPRESA) if v.tzinfo is None else v
 
     @field_validator("anotacao")
     @classmethod
@@ -78,9 +86,11 @@ def _ciclo_aberto(db, empresa):
 
 
 def _abrir_ciclo(db, empresa, status, por):
+    """Abre o ciclo; devolve None se outra execução abriu primeiro (índice de um aberto)."""
     return db.execute(text(
-        "INSERT INTO tiny.cobranca_ciclos (empresa, status, aberto_por) VALUES (:e, :s, :p) RETURNING id"
-    ), {"e": empresa, "s": status, "p": por}).scalar_one()
+        "INSERT INTO tiny.cobranca_ciclos (empresa, status, aberto_por) VALUES (:e, :s, :p) "
+        "ON CONFLICT (empresa) WHERE encerrado_em IS NULL DO NOTHING RETURNING id"
+    ), {"e": empresa, "s": status, "p": por}).scalar_one_or_none()
 
 
 def sincronizar(db: Session, hoje: date) -> dict:
@@ -96,6 +106,8 @@ def sincronizar(db: Session, hoje: date) -> dict:
     """), p).mappings().all()
     for n in novos:
         ciclo = _abrir_ciclo(db, n["empresa"], "sem_contato", SISTEMA)
+        if ciclo is None:
+            continue
         _evento(db, ciclo, por=SISTEMA, tipo="sistema", status_novo="sem_contato",
                 anotacao=f"Cobrança aberta: título com {n['maior_atraso']} dias de atraso.",
                 valor=n["valor_inadimplente"])
@@ -107,9 +119,12 @@ def sincronizar(db: Session, hoje: date) -> dict:
           AND NOT EXISTS (SELECT 1 FROM empresas e WHERE e.empresa = c.empresa)
     """), p).mappings().all()
     for c in quitados:
-        db.execute(text(
-            "UPDATE tiny.cobranca_ciclos SET status = 'pago', encerrado_em = now() WHERE id = :id"
-        ), {"id": c["id"]})
+        fechado = db.execute(text(
+            "UPDATE tiny.cobranca_ciclos SET status = 'pago', encerrado_em = now() "
+            "WHERE id = :id AND encerrado_em IS NULL RETURNING id"
+        ), {"id": c["id"]}).scalar_one_or_none()
+        if fechado is None:
+            continue
         _evento(db, c["id"], por=SISTEMA, tipo="sistema", status_anterior=c["status"],
                 status_novo="pago", anotacao="Sem títulos vencidos no Tiny.", valor=0)
         contagem["pagos"] += 1
@@ -120,7 +135,13 @@ def sincronizar(db: Session, hoje: date) -> dict:
     """), p).mappings().all()
     for c in quebradas:
         valores = valores_da_empresa(db, hoje, c["empresa"]) or {}
-        db.execute(text("UPDATE tiny.cobranca_ciclos SET status = 'quebrada' WHERE id = :id"), {"id": c["id"]})
+        virou = db.execute(text(
+            "UPDATE tiny.cobranca_ciclos SET status = 'quebrada' "
+            "WHERE id = :id AND encerrado_em IS NULL AND status = 'promessa' "
+            "AND promessa_data < CAST(:hoje AS date) RETURNING id"
+        ), {"id": c["id"], "hoje": hoje}).scalar_one_or_none()
+        if virou is None:
+            continue
         _evento(db, c["id"], por=SISTEMA, tipo="sistema", status_anterior="promessa",
                 status_novo="quebrada", promessa_data=c["promessa_data"],
                 promessa_valor=c["promessa_valor"],
@@ -160,6 +181,13 @@ def registrar_evento(db: Session, hoje: date, empresa: str, dados: NovoEvento, u
     if ciclo is None:
         id_ciclo = _abrir_ciclo(db, empresa, novo or "em_contato", usuario)
         anterior = None
+        if id_ciclo is None:
+            # outra chamada abriu o ciclo no meio: segue com ele
+            ciclo = _ciclo_aberto(db, empresa)
+            if ciclo is None:
+                raise ErroDeCobranca("A cobrança desta empresa mudou agora há pouco. Tente de novo.", 409)
+            id_ciclo = ciclo["id"]
+            anterior = ciclo["status"]
     else:
         id_ciclo = ciclo["id"]
         anterior = ciclo["status"]

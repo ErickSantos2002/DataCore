@@ -228,3 +228,115 @@ def test_job_pula_a_sincronizacao(monkeypatch, tipo, dry_run):
 
     codigo, registro, sessao = _rodar_carregar(monkeypatch, tipo, dry_run, nao_deve_chamar)
     assert codigo == 0 and registro.detalhe is None and sessao.commits == 0
+
+
+# ───────────────────────────────────────────── fuso e corridas
+
+def test_data_sem_fuso_vale_horario_de_brasilia(db, contas):
+    from zoneinfo import ZoneInfo
+
+    from app.services.cobranca import NovoEvento, registrar_evento
+
+    contas(venceu_ha=40)
+    naive = datetime.now() - timedelta(hours=2)
+    evento = NovoEvento(ocorrido_em=naive, canal="telefone")
+    assert evento.ocorrido_em.tzinfo is not None
+    registrar_evento(db, HOJE, "11111111", evento, "erick")
+    gravado = db.execute(text("SELECT ocorrido_em FROM tiny.cobranca_eventos WHERE tipo = 'contato'")).scalar()
+    assert gravado == naive.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+
+
+def test_data_sem_fuso_no_futuro_e_422(db, contas):
+    from app.services.cobranca import ErroDeCobranca, NovoEvento, registrar_evento
+
+    contas(venceu_ha=40)
+    evento = NovoEvento(ocorrido_em=datetime(2999, 1, 1, 10, 0, 0), canal="telefone")
+    with pytest.raises(ErroDeCobranca) as erro:
+        registrar_evento(db, HOJE, "11111111", evento, "erick")
+    assert erro.value.status_code == 422 and "futuro" in str(erro.value)
+
+
+class _Resultado:
+    def __init__(self, linhas):
+        self._linhas = linhas
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self._linhas
+
+
+def _com_candidatos_velhos(db, monkeypatch, trecho, linhas):
+    """Faz o SELECT de candidatos que contém `trecho` devolver `linhas` (já defasadas)."""
+    original = db.execute
+
+    def falso(stmt, *a, **k):
+        if trecho in str(stmt) and str(stmt).lstrip().upper().startswith(("WITH", "SELECT")):
+            return _Resultado(linhas)
+        return original(stmt, *a, **k)
+
+    monkeypatch.setattr(db, "execute", falso)
+
+
+def test_corrida_fechar_ciclo_ja_fechado_nao_conta_nem_grava(db, contas, engine, monkeypatch):
+    from app.services.cobranca import sincronizar
+
+    contas(venceu_ha=40)
+    sincronizar(db, HOJE)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE tiny.contas_receber SET situacao = 'pago', saldo = 0"))
+    sincronizar(db, HOJE)
+    eventos = len(_eventos(db))
+    ciclo_id = db.execute(text("SELECT id FROM tiny.cobranca_ciclos")).scalar()
+    _com_candidatos_velhos(db, monkeypatch, "NOT EXISTS (SELECT 1 FROM empresas e",
+                           [{"id": ciclo_id, "status": "sem_contato"}])
+    assert sincronizar(db, HOJE)["pagos"] == 0
+    assert len(_eventos(db)) == eventos
+
+
+def test_corrida_quebrar_nao_pisa_em_quem_saiu_de_promessa(db, contas, monkeypatch):
+    from app.services.cobranca import NovoEvento, Promessa, registrar_evento, sincronizar
+
+    contas(venceu_ha=40)
+    sincronizar(db, HOJE)
+    registrar_evento(db, HOJE, "11111111", NovoEvento(
+        ocorrido_em=AGORA, canal="telefone", status_novo="promessa",
+        promessa=Promessa(data=HOJE)), "erick")
+    registrar_evento(db, HOJE, "11111111", NovoEvento(ocorrido_em=AGORA, status_novo="negociacao"), "erick")
+    ciclo = db.execute(text("SELECT id, empresa FROM tiny.cobranca_ciclos")).one()
+    eventos = len(_eventos(db))
+    _com_candidatos_velhos(db, monkeypatch, "status = 'promessa' AND promessa_data <",
+                           [{"id": ciclo[0], "empresa": ciclo[1], "promessa_data": HOJE, "promessa_valor": None}])
+    assert sincronizar(db, HOJE + timedelta(days=1))["quebradas"] == 0
+    assert _ciclos(db)[0][1] == "negociacao" and len(_eventos(db)) == eventos
+
+
+def test_corrida_abrir_ciclo_ja_aberto_nao_estoura_nem_duplica(db, contas, monkeypatch):
+    from app.services.cobranca import sincronizar
+
+    contas(venceu_ha=40)
+    sincronizar(db, HOJE)
+    eventos = len(_eventos(db))
+    _com_candidatos_velhos(db, monkeypatch, "e.valor_inadimplente > 0",
+                           [{"empresa": "11111111", "valor_inadimplente": 1000, "maior_atraso": 40}])
+    assert sincronizar(db, HOJE)["abertos"] == 0
+    assert len(_ciclos(db)) == 1 and len(_eventos(db)) == eventos
+
+
+def test_registrar_evento_perde_a_corrida_de_abrir_ciclo(db, contas, monkeypatch):
+    from app.services import cobranca
+    from app.services.cobranca import NovoEvento, registrar_evento
+
+    contas(venceu_ha=40)
+    cobranca.sincronizar(db, HOJE)  # outro processo já abriu o ciclo
+    original = cobranca._ciclo_aberto
+    chamadas = []
+
+    def primeira_vez_vazio(d, empresa):
+        chamadas.append(1)
+        return None if len(chamadas) == 1 else original(d, empresa)
+
+    monkeypatch.setattr(cobranca, "_ciclo_aberto", primeira_vez_vazio)
+    registrar_evento(db, HOJE, "11111111", NovoEvento(ocorrido_em=AGORA, canal="email"), "erick")
+    assert _ciclos(db) == [("11111111", "em_contato", False)]
