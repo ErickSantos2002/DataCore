@@ -1,5 +1,6 @@
 import type {
-  DetalheDaEmpresa, EmpresaDaLista, FiltrosDeEmpresas, FiltrosDoResumo, Indicadores, NovoEvento, ResumoDeInadimplencia,
+  DetalheDaEmpresa, EmpresaDaLista, FiltrosDeEmpresas, FiltrosDoResumo, FiltrosDeIndicadores, Indicadores, NovoEvento,
+  ResumoDeInadimplencia,
 } from "../../services/inadimplencia";
 import type { ContaDaTela } from "../../services/notasapi";
 
@@ -14,6 +15,7 @@ export function criarServidorDeInadimplencia() {
     indicadores: null as Indicadores | null,
     pedidos: [] as FiltrosDeEmpresas[],
     pedidosResumo: [] as FiltrosDoResumo[],
+    pedidosIndicadores: [] as FiltrosDeIndicadores[],
     eventos: [] as { empresa: string; dados: NovoEvento }[],
     observacoes: [] as { empresa: string; texto: string }[],
     erroDeGravacao: null as string | null,
@@ -42,7 +44,10 @@ export function criarServidorDeInadimplencia() {
     }),
     fetchDetalhe: (e: string) => responder(() => estado.detalhes[e]),
     fetchTitulos: (e: string) => responder(() => estado.titulos[e] ?? []),
-    fetchIndicadores: () => responder(() => estado.indicadores!),
+    fetchIndicadores: (f: FiltrosDeIndicadores = {}) => responder(() => {
+      estado.pedidosIndicadores.push(f);
+      return estado.indicadores!;
+    }),
     registrarEvento: (empresa: string, dados: NovoEvento) => {
       if (estado.erroDeGravacao) return recusar();
       estado.eventos.push({ empresa, dados });

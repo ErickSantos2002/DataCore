@@ -73,6 +73,59 @@ export function nomeDoMes(mes: string): string {
   return `${MESES[Number(m) - 1]}/${a.slice(2)}`;
 }
 
+/**
+ * Na lista de categoria/forma/UF, o valor que quer dizer "nulo ou vazio" ("Sem categoria").
+ * Mora aqui e não em `services/`: o teste de tela troca o módulo de serviço inteiro pelo dublê.
+ */
+export const SEM_VALOR = "__sem__";
+
+/** O "Período rápido" da aba Indicadores: recorta por MÊS de vencimento, então presets de mês. */
+export const PRESETS_DE_INDICADORES = [
+  { value: "tudo", label: "Tudo" },
+  { value: "12meses", label: "Últimos 12 meses" },
+  { value: "esteAno", label: "Este ano" },
+  { value: "anoPassado", label: "Ano passado" },
+  { value: "custom", label: "Personalizado" },
+];
+
+/** `AAAA-MM` do instante no fuso de quem olha — pelo `diaLocal`, nunca por `toISOString` (que já é amanhã à noite). */
+function mesLocal(instante: Date): string {
+  return diaLocal(instante).slice(0, 7);
+}
+
+/**
+ * Os meses que cada preset impõe. `null` para "Personalizado" (não mexe no que a pessoa digitou);
+ * "Últimos 12 meses" vai do mês corrente até 11 meses antes, como a série do gráfico.
+ */
+export function mesesDoPreset(preset: string, agora: Date): { inicio: string; fim: string } | null {
+  const ano = agora.getFullYear();
+  switch (preset) {
+    case "custom":
+      return null;
+    case "12meses":
+      return { inicio: mesLocal(new Date(ano, agora.getMonth() - 11, 1)), fim: mesLocal(agora) };
+    case "esteAno":
+      return { inicio: `${ano}-01`, fim: `${ano}-12` };
+    case "anoPassado":
+      return { inicio: `${ano - 1}-01`, fim: `${ano - 1}-12` };
+    default:
+      return { inicio: "", fim: "" };
+  }
+}
+
+/**
+ * O rótulo do card do total. Sem filtro, "Total — desde AAAA"; só com período, o período
+ * ("Período: jan/25 – jun/25"); com qualquer outro filtro, "No recorte" — listar cada filtro
+ * no card não caberia, e a barra logo acima já diz quais estão ativos.
+ */
+export function rotuloDoTotal(f: { mes_inicio?: string; mes_fim?: string; outros: boolean }, desde: string | null): string {
+  if (f.outros) return "No recorte";
+  if (f.mes_inicio && f.mes_fim) return `Período: ${nomeDoMes(f.mes_inicio)} – ${nomeDoMes(f.mes_fim)}`;
+  if (f.mes_inicio) return `Período: desde ${nomeDoMes(f.mes_inicio)}`;
+  if (f.mes_fim) return `Período: até ${nomeDoMes(f.mes_fim)}`;
+  return `Total — desde ${desde?.slice(0, 4) ?? "—"}`;
+}
+
 export function linhasDaPlanilhaDeEmpresas(empresas: EmpresaDaLista[]): Record<string, unknown>[] {
   return empresas.map((e) => ({
     Empresa: e.nome,

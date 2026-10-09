@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Inadimplencia from "./Inadimplencia";
 import { textoDoTooltip } from "./inadimplencia/AbaIndicadores";
@@ -90,7 +90,7 @@ async function montar() {
 beforeEach(() => {
   const e = falso.atual!.estado;
   Object.assign(e, { modo: "ok", resumo: RESUMO, empresas: EMPRESAS, pedidos: [], eventos: [],
-                     observacoes: [], erroDeGravacao: null, pedidosResumo: [] });
+                     observacoes: [], erroDeGravacao: null, pedidosResumo: [], pedidosIndicadores: [] });
 });
 
 describe("Inadimplência — aba Cobrança", () => {
@@ -550,7 +550,14 @@ const INDICADORES: Indicadores = {
   desde: "2015-01-01",
   ultimo_fechado: { mes: "2026-08", em_apuracao: false, valor: 1000, inadimplente: 158, titulos: 10, titulos_inadimplentes: 2, taxa: 0.158 },
   media_12_meses: 0.129,
+  opcoes: { categorias: ["Locação", "Venda"], formas_pagamento: ["Boleto", "Pix"], ufs: ["PE", "SP"] },
 };
+
+/** O último pedido de indicadores que o servidor falso recebeu. */
+function ultimoPedidoDeIndicadores() {
+  const p = falso.atual!.estado.pedidosIndicadores;
+  return p[p.length - 1];
+}
 
 describe("Inadimplência — aba Indicadores", () => {
   beforeEach(() => { falso.atual!.estado.indicadores = INDICADORES; });
@@ -616,5 +623,124 @@ describe("Inadimplência — aba Indicadores", () => {
     expect(texto).toContain("Valor vencido: ");
     expect(texto).toContain("Não pago em 30 dias: ");
     expect(texto).toContain("(em apuração)");
+  });
+});
+
+describe("Inadimplência — filtros da aba Indicadores", () => {
+  beforeEach(() => { falso.atual!.estado.indicadores = INDICADORES; });
+  afterEach(() => vi.useRealTimers());
+
+  async function abrirIndicadores() {
+    await montar();
+    fireEvent.click(screen.getByRole("tab", { name: "Indicadores" }));
+    await assentar(); await assentar();
+  }
+
+  function marcar(rotulo: string, opcao: string) {
+    const botao = screen.getByRole("button", { name: new RegExp(`^${rotulo}`) });
+    if (botao.getAttribute("aria-expanded") !== "true") fireEvent.click(botao);
+    fireEvent.click(within(screen.getByRole("group", { name: rotulo })).getByRole("checkbox", { name: opcao }));
+  }
+
+  it("sem filtro, o pedido vai vazio e o período rápido é Tudo", async () => {
+    await abrirIndicadores();
+    expect(screen.getByLabelText("Período rápido")).toHaveValue("tudo");
+    expect(ultimoPedidoDeIndicadores()).toEqual({});
+  });
+
+  it("mês inicial e final vão como AAAA-MM e viram Personalizado", async () => {
+    await abrirIndicadores();
+    escolher("Mês inicial", "2025-01");
+    escolher("Mês final", "2025-06");
+    await assentar();
+    expect(screen.getByLabelText("Período rápido")).toHaveValue("custom");
+    expect(ultimoPedidoDeIndicadores()).toEqual({ mes_inicio: "2025-01", mes_fim: "2025-06" });
+  });
+
+  it.each([
+    ["12meses", "2025-01", "2025-12"],
+    ["esteAno", "2025-01", "2025-12"],
+    ["anoPassado", "2024-01", "2024-12"],
+  ])("o preset %s calcula os meses pelo dia local", async (preset, inicio, fim) => {
+    // 31/12/2025 às 23h30 local: em UTC (a oeste de Greenwich) já é 2026
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2025, 11, 31, 23, 30));
+    await abrirIndicadores();
+    escolher("Período rápido", preset);
+    await assentar();
+    expect(screen.getByLabelText("Mês inicial")).toHaveValue(inicio);
+    expect(screen.getByLabelText("Mês final")).toHaveValue(fim);
+    expect(ultimoPedidoDeIndicadores()).toEqual({ mes_inicio: inicio, mes_fim: fim });
+    escolher("Período rápido", "tudo");
+    await assentar();
+    expect(ultimoPedidoDeIndicadores()).toEqual({});
+  });
+
+  it("categoria, forma e UF usam as opções da API e o Sem … manda __sem__", async () => {
+    await abrirIndicadores();
+    marcar("Categoria", "Venda");
+    marcar("Categoria", "Sem categoria");
+    marcar("Forma de pagamento", "Sem forma");
+    marcar("UF do cliente", "PE");
+    await assentar();
+    expect(ultimoPedidoDeIndicadores()).toEqual({
+      categoria: ["Venda", "__sem__"], forma_pagamento: ["__sem__"], uf: ["PE"],
+    });
+  });
+
+  it("o cliente vai depois de uma pausa na digitação, sem espaços nas pontas", async () => {
+    await abrirIndicadores();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fireEvent.change(screen.getByLabelText("Cliente"), { target: { value: "alf" } });
+    fireEvent.change(screen.getByLabelText("Cliente"), { target: { value: " alfa " } });
+    await assentar();
+    expect(ultimoPedidoDeIndicadores()).toEqual({});
+    await act(async () => { vi.advanceTimersByTime(500); });
+    await assentar();
+    expect(ultimoPedidoDeIndicadores()).toEqual({ cliente: "alfa" });
+    expect(falso.atual!.estado.pedidosIndicadores.filter((p) => p.cliente === "alf")).toHaveLength(0);
+  });
+
+  it("o card do total diz o recorte: desde, período ou No recorte", async () => {
+    await abrirIndicadores();
+    expect(screen.getByText("Total — desde 2015")).toBeInTheDocument();
+    escolher("Mês inicial", "2025-01");
+    escolher("Mês final", "2025-06");
+    await assentar();
+    expect(screen.getByText("Período: jan/25 – jun/25")).toBeInTheDocument();
+    marcar("UF do cliente", "SP");
+    await assentar();
+    expect(screen.getByText("No recorte")).toBeInTheDocument();
+  });
+
+  it("limpar filtros volta tudo ao padrão", async () => {
+    await abrirIndicadores();
+    escolher("Período rápido", "anoPassado");
+    marcar("Categoria", "Venda");
+    await assentar();
+    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
+    await assentar();
+    expect(screen.getByLabelText("Período rápido")).toHaveValue("tudo");
+    expect(ultimoPedidoDeIndicadores()).toEqual({});
+  });
+
+  it("recorte sem título vencido: gráfico vazio e cards com traço", async () => {
+    falso.atual!.estado.indicadores = {
+      ...INDICADORES, mensal: [], anual: [], desde: null, ultimo_fechado: null, media_12_meses: null,
+      total: { valor: 0, inadimplente: 0, titulos: 0, titulos_inadimplentes: 0, taxa: null },
+    };
+    await abrirIndicadores();
+    expect(screen.getByText("Nenhum título vencido neste recorte.")).toBeInTheDocument();
+    expect(screen.getByText(/^Último mês fechado/)).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("trocar o filtro mantém os números anteriores à mostra enquanto carrega", async () => {
+    await abrirIndicadores();
+    falso.atual!.estado.modo = "pendente";
+    marcar("Categoria", "Venda");
+    await assentar();
+    expect(screen.getByText("Taxa mensal")).toBeInTheDocument();
+    expect(screen.getByText("15,8%")).toBeInTheDocument();
   });
 });

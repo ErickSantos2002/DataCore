@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   fetchDetalhe, fetchEmpresas, fetchIndicadores, fetchResumo, fetchTitulos,
-  type DetalheDaEmpresa, type FiltrosDeEmpresas, type FiltrosDoResumo, type Indicadores,
-  type PaginaDeEmpresas, type ResumoDeInadimplencia,
+  type DetalheDaEmpresa, type FiltrosDeEmpresas, type FiltrosDeIndicadores, type FiltrosDoResumo,
+  type Indicadores, type PaginaDeEmpresas, type ResumoDeInadimplencia,
 } from "../../services/inadimplencia";
 import type { ContaDaTela } from "../../services/notasapi";
 
@@ -58,8 +58,11 @@ export function useTitulos(empresa: string | null) {
   return useBusca<ContaDaTela[]>(empresa, () => fetchTitulos(empresa!), "Não foi possível carregar os títulos.");
 }
 
-export function useIndicadores(ativo: boolean) {
-  return useBusca<Indicadores>(ativo ? "indicadores" : null, fetchIndicadores, "Não foi possível carregar os indicadores.");
+/** Só busca com a aba aberta; trocar o filtro busca de novo com os números anteriores à mostra. */
+export function useIndicadores(ativo: boolean, filtros: FiltrosDeIndicadores = {}) {
+  const chave = useMemo(() => JSON.stringify(filtros), [filtros]);
+  return useBusca<Indicadores>(ativo ? chave : null, () => fetchIndicadores(JSON.parse(chave)),
+    "Não foi possível carregar os indicadores.", true);
 }
 
 /** Todas as empresas do filtro, página a página — só para a planilha. */

@@ -133,6 +133,8 @@ export interface PontoDeTaxa {
 }
 export interface MesDeTaxa extends PontoDeTaxa { mes: string; em_apuracao: boolean }
 export interface AnoDeTaxa extends PontoDeTaxa { ano: number; ano_corrente: boolean }
+/** As opções dos selects da aba Indicadores: da base inteira, sem os filtros, sem nulos nem vazios. */
+export interface OpcoesDosIndicadores { categorias: string[]; formas_pagamento: string[]; ufs: string[] }
 export interface Indicadores {
   mensal: MesDeTaxa[];
   anual: AnoDeTaxa[];
@@ -140,6 +142,17 @@ export interface Indicadores {
   desde: string | null;
   ultimo_fechado: MesDeTaxa | null;
   media_12_meses: number | null;
+  opcoes: OpcoesDosIndicadores;
+}
+
+/** O recorte de TÍTULOS da aba Indicadores. Meses em `AAAA-MM`; listas vazias não vão; `__sem__` = nulo ou vazio. */
+export interface FiltrosDeIndicadores extends Params {
+  mes_inicio?: string;
+  mes_fim?: string;
+  categoria?: string[];
+  forma_pagamento?: string[];
+  uf?: string[];
+  cliente?: string;
 }
 
 export interface NovoEvento {
@@ -161,8 +174,8 @@ export const fetchDetalhe = async (empresa: string) =>
   (await api.get<DetalheDaEmpresa>(url(empresa))).data;
 export const fetchTitulos = async (empresa: string) =>
   (await api.get<ContaDaTela[]>(`${url(empresa)}/titulos`)).data;
-export const fetchIndicadores = async () =>
-  (await api.get<Indicadores>("/inadimplencia/indicadores")).data;
+export const fetchIndicadores = async (params: FiltrosDeIndicadores = {}) =>
+  (await api.get<Indicadores>("/inadimplencia/indicadores", { params })).data;
 export const registrarEvento = async (empresa: string, dados: NovoEvento) =>
   (await api.post<DetalheDaEmpresa>(`${url(empresa)}/eventos`, dados)).data;
 export const gravarObservacao = async (empresa: string, texto: string) =>
