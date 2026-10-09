@@ -3,6 +3,7 @@
 Todas as rotas exigem admin ou financeiro NO BACKEND — a tela também esconde, mas a
 regra não pode morar só nela. Spec: docs/superpowers/specs/2026-10-09-inadimplencia-design.md
 """
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,9 +32,33 @@ def get_db():
         db.close()
 
 
+def _validar_recorte(status, faixa, data_tipo, data_inicio, data_fim, sem_contato) -> None:
+    """Os filtros que a lista e o resumo compartilham; o erro é 422 com mensagem em português."""
+    if faixa is not None and faixa not in consultas.FAIXAS:
+        raise HTTPException(422, f"`faixa` deve ser uma de: {', '.join(consultas.FAIXAS)}.")
+    if status and not set(status) <= TODOS_OS_STATUS:
+        raise HTTPException(422, "Status desconhecido no filtro.")
+    if data_tipo is not None and data_tipo not in consultas.TIPOS_DE_DATA:
+        raise HTTPException(422, f"`data_tipo` deve ser um de: {', '.join(consultas.TIPOS_DE_DATA)}.")
+    if data_inicio and data_fim and data_fim < data_inicio:
+        raise HTTPException(422, "A data final não pode ser anterior à inicial.")
+    if sem_contato is not None and sem_contato not in consultas.SEM_CONTATO:
+        raise HTTPException(422, f"`sem_contato` deve ser um de: {', '.join(consultas.SEM_CONTATO)}.")
+
+
 @router.get("/resumo", response_model=consultas.ResumoDeInadimplencia)
-def resumo(db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
-    return consultas.resumo(db, hoje_na_empresa())
+def resumo(
+    status: Optional[List[str]] = Query(None),
+    faixa: Optional[str] = Query(None),
+    data_tipo: Optional[str] = Query(None),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    sem_contato: Optional[str] = Query(None),
+    db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO),
+):
+    _validar_recorte(status, faixa, data_tipo, data_inicio, data_fim, sem_contato)
+    return consultas.resumo(db, hoje_na_empresa(), status=status, faixa=faixa, data_tipo=data_tipo,
+                            data_inicio=data_inicio, data_fim=data_fim, sem_contato=sem_contato)
 
 
 @router.get("/empresas", response_model=consultas.PaginaDeEmpresas)
@@ -41,6 +66,10 @@ def empresas(
     busca: Optional[str] = Query(None, max_length=120),
     status: Optional[List[str]] = Query(None),
     faixa: Optional[str] = Query(None),
+    data_tipo: Optional[str] = Query(None),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    sem_contato: Optional[str] = Query(None),
     incluir_atraso: bool = Query(False),
     ordenar_por: str = Query("valor"),
     direcao: str = Query("desc", pattern="^(asc|desc)$"),
@@ -51,13 +80,11 @@ def empresas(
 ):
     if ordenar_por not in consultas.ORDENACOES_DE_EMPRESAS:
         raise HTTPException(422, f"`ordenar_por` deve ser um de: {', '.join(consultas.ORDENACOES_DE_EMPRESAS)}.")
-    if faixa is not None and faixa not in consultas.FAIXAS:
-        raise HTTPException(422, f"`faixa` deve ser uma de: {', '.join(consultas.FAIXAS)}.")
-    if status and not set(status) <= TODOS_OS_STATUS:
-        raise HTTPException(422, "Status desconhecido no filtro.")
+    _validar_recorte(status, faixa, data_tipo, data_inicio, data_fim, sem_contato)
     return consultas.pagina_de_empresas(
         db, hoje_na_empresa(), busca=busca, status=status, faixa=faixa, incluir_atraso=incluir_atraso,
-        ordenar_por=ordenar_por, direcao=direcao, limite=limite, offset=offset)
+        ordenar_por=ordenar_por, direcao=direcao, limite=limite, offset=offset, data_tipo=data_tipo,
+        data_inicio=data_inicio, data_fim=data_fim, sem_contato=sem_contato)
 
 
 def _detalhe_ou_404(db, empresa):

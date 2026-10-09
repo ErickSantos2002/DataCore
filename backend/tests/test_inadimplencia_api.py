@@ -136,3 +136,31 @@ def test_observacao_longa_vira_422_em_portugues(client, financeiro, contas):
                    headers=financeiro.headers)
     assert r.status_code == 422
     assert isinstance(r.json()["detail"], str) and "4.000" in r.json()["detail"]
+
+
+def test_filtros_de_data_e_contato_chegam_a_lista_e_ao_resumo(client, financeiro, contas):
+    from datetime import date, timedelta
+
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=40, valor=100)
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=100, valor=200)
+    params = {"data_tipo": "vencimento", "sem_contato": "nunca",
+              "data_inicio": (date.today() - timedelta(days=50)).isoformat(),
+              "data_fim": (date.today() - timedelta(days=30)).isoformat()}
+    r = client.get("/inadimplencia/empresas", params=params, headers=financeiro.headers).json()
+    assert r["itens"][0]["valor_devido"] == 100
+    r = client.get("/inadimplencia/resumo", params=params, headers=financeiro.headers).json()
+    assert r["total_vencido"] == 100
+
+
+@pytest.mark.parametrize("rota", ["/inadimplencia/empresas", "/inadimplencia/resumo"])
+@pytest.mark.parametrize("params", [
+    {"data_tipo": "pagamento"}, {"sem_contato": "5"},
+    {"data_inicio": "2026-10-10", "data_fim": "2026-10-01"}, {"data_inicio": "ontem"}])
+def test_filtros_invalidos_422(client, financeiro, rota, params):
+    assert client.get(rota, params=params, headers=financeiro.headers).status_code == 422
+
+
+def test_resumo_valida_status_e_faixa(client, financeiro):
+    assert client.get("/inadimplencia/resumo", params={"faixa": "x"}, headers=financeiro.headers).status_code == 422
+    assert client.get("/inadimplencia/resumo", params={"status": "inventado"},
+                      headers=financeiro.headers).status_code == 422

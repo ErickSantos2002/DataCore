@@ -41,13 +41,47 @@ def hoje_na_empresa() -> date:
     return datetime.now(FUSO_DA_EMPRESA).date()
 
 
+#: Os filtros de data que recortam TÍTULOS (antes de agregar) e os que recortam EMPRESAS
+#: (pelo ciclo de cobrança aberto). O nome vem do pedido; o campo, desta lista fechada.
+DATAS_DE_TITULO = ("vencimento", "emissao")
+DATAS_DE_EMPRESA = ("promessa", "contato")
+TIPOS_DE_DATA = DATAS_DE_TITULO + DATAS_DE_EMPRESA
+
+#: "Sem contato há mais de": dias, ou "nunca" (sem ciclo aberto ou sem contato registrado).
+SEM_CONTATO = {"7": 7, "15": 15, "30": 30, "nunca": None}
+
+
 def params_base(hoje: date) -> dict:
     return {
         "hoje": hoje,
         "quitadas": QUITADAS_A_RECEBER,
         "canceladas": SITUACOES_CANCELADAS,
         "carencia": CARENCIA_DIAS,
+        # sem recorte de títulos: tudo nulo
+        "tit_campo": "vencimento", "tit_ini": None, "tit_fim": None,
     }
+
+
+def params_do_recorte(hoje: date, *, status: Optional[List[str]] = None, faixa: Optional[str] = None,
+                      data_tipo: Optional[str] = None, data_inicio: Optional[date] = None,
+                      data_fim: Optional[date] = None, sem_contato: Optional[str] = None) -> dict:
+    """Os parâmetros dos filtros que a lista e o resumo compartilham (menos busca e ordenação)."""
+    lo, hi = FAIXAS[faixa] if faixa else (None, None)
+    p = {**params_base(hoje), "status": status or None, "faixa_lo": lo, "faixa_hi": hi,
+         "emp_campo": None, "emp_ini": None, "emp_fim": None,
+         "sem_dias": None, "nunca": False}
+    if data_tipo in DATAS_DE_TITULO:
+        p.update(tit_campo=data_tipo, tit_ini=data_inicio, tit_fim=data_fim)
+    elif data_tipo in DATAS_DE_EMPRESA:
+        p.update(emp_campo=data_tipo, emp_ini=data_inicio, emp_fim=data_fim)
+    if sem_contato == "nunca":
+        p["nunca"] = True
+    elif sem_contato:
+        p["sem_dias"] = SEM_CONTATO[sem_contato]
+    # Só restringe os cards a um conjunto de empresas quando algum filtro de empresa está ativo.
+    p["restringe"] = bool(p["status"] or lo is not None or p["nunca"] or p["sem_dias"]
+                          or (p["emp_campo"] and (data_inicio or data_fim)))
+    return p
 
 
 # A chave da empresa: raiz do CNPJ (8 dígitos), CPF inteiro, ou o nome normalizado.
@@ -63,6 +97,13 @@ WITH titulos AS (
     FROM tiny.contas_receber
     WHERE excluida_na_origem_em IS NULL
       AND lower(COALESCE(situacao, '')) <> ALL(CAST(:canceladas AS text[]))
+      -- recorte opcional de títulos por vencimento ou emissão (`:tit_campo` vem de lista fechada)
+      AND (CAST(:tit_ini AS date) IS NULL
+           OR CASE WHEN CAST(:tit_campo AS text) = 'emissao' THEN data ELSE vencimento END
+              >= CAST(:tit_ini AS date))
+      AND (CAST(:tit_fim AS date) IS NULL
+           OR CASE WHEN CAST(:tit_campo AS text) = 'emissao' THEN data ELSE vencimento END
+              <= CAST(:tit_fim AS date))
 ),
 t AS (
     SELECT *,
@@ -138,6 +179,42 @@ class ResumoDeInadimplencia(BaseModel):
     em_negociacao: int
 
 
+# Os filtros de EMPRESA, iguais na lista e no resumo. `c` é o ciclo aberto, `e` a empresa.
+# O dia do contato é o dia no fuso da empresa; `AT TIME ZONE` e `CAST`, nunca o cast com dois-pontos.
+STATUS_DA_EMPRESA = "COALESCE(c.status, CASE WHEN e.valor_inadimplente > 0 THEN 'sem_contato' END)"
+DIA_DO_CONTATO = "CAST((c.ultimo_contato_em AT TIME ZONE 'America/Sao_Paulo') AS date)"
+FILTROS_DE_EMPRESA = f"""
+      AND (CAST(:status AS text[]) IS NULL OR {STATUS_DA_EMPRESA} = ANY(CAST(:status AS text[])))
+      AND (CAST(:faixa_lo AS int) IS NULL OR EXISTS (
+            SELECT 1 FROM t WHERE t.empresa = e.empresa
+               AND t.atraso >= CAST(:faixa_lo AS int)
+               AND (CAST(:faixa_hi AS int) IS NULL OR t.atraso <= CAST(:faixa_hi AS int))))
+      AND (CAST(:emp_campo AS text) IS NULL OR (
+            (CAST(:emp_ini AS date) IS NULL OR
+               CASE WHEN CAST(:emp_campo AS text) = 'promessa' THEN c.promessa_data
+                    ELSE {DIA_DO_CONTATO} END >= CAST(:emp_ini AS date))
+        AND (CAST(:emp_fim AS date) IS NULL OR
+               CASE WHEN CAST(:emp_campo AS text) = 'promessa' THEN c.promessa_data
+                    ELSE {DIA_DO_CONTATO} END <= CAST(:emp_fim AS date))))
+      AND (NOT CAST(:nunca AS boolean) OR c.ultimo_contato_em IS NULL)
+      AND (CAST(:sem_dias AS int) IS NULL OR c.ultimo_contato_em IS NULL
+           OR {DIA_DO_CONTATO} < CAST(:hoje AS date) - CAST(:sem_dias AS int))
+"""
+
+# As empresas do recorte (sem busca nem "incluir só em atraso") e os títulos delas: o resumo
+# conta em cima de `tr`. Sem filtro de empresa ativo, `tr` é `t` inteiro.
+SQL_RECORTE = f"""
+, recorte AS (
+    SELECT e.*, c.status AS ciclo_status, c.promessa_data
+    FROM empresas e
+    LEFT JOIN tiny.cobranca_ciclos c ON c.empresa = e.empresa AND c.encerrado_em IS NULL
+    WHERE TRUE {FILTROS_DE_EMPRESA}
+),
+tr AS (
+    SELECT * FROM t WHERE NOT CAST(:restringe AS boolean) OR empresa IN (SELECT empresa FROM recorte)
+)
+"""
+
 SQL_RESUMO = """
 SELECT
     COALESCE(sum(saldo) FILTER (WHERE em_aberto), 0)                         AS total_a_receber,
@@ -146,58 +223,73 @@ SELECT
     COALESCE(sum(saldo) FILTER (WHERE atraso > CAST(:carencia AS int)), 0)   AS inadimplente,
     count(*) FILTER (WHERE atraso > 0)                                       AS titulos_vencidos,
     count(*) FILTER (WHERE atraso > CAST(:carencia AS int))                  AS titulos_inadimplentes,
-    count(DISTINCT empresa) FILTER (WHERE atraso > CAST(:carencia AS int))   AS empresas_inadimplentes,
-    -- a safra inteira: o que passou de 30 dias (estritamente) sem pagar, na história;
-    -- pago no dia 30 ainda é em dia, e 30 dias de atraso ainda é atraso, como nas faixas
-    COALESCE(sum(CASE WHEN em_aberto THEN saldo
-                      WHEN liquidacao > vencimento + CAST(:carencia AS int) THEN valor
-                      ELSE 0 END)
-             FILTER (WHERE vencimento + CAST(:carencia AS int) < CAST(:hoje AS date)), 0)
+    count(DISTINCT empresa) FILTER (WHERE atraso > CAST(:carencia AS int))   AS empresas_inadimplentes
+FROM tr
+"""
+
+# A safra inteira: o que passou de 30 dias (estritamente) sem pagar, na história; pago no dia 30
+# ainda é em dia, e 30 dias de atraso ainda é atraso, como nas faixas. É o histórico todo: roda
+# com os parâmetros SEM filtro, e por isso o "recuperado" não segue os filtros da tela.
+SQL_SAFRA = """
+SELECT COALESCE(sum(saldo) FILTER (WHERE atraso > CAST(:carencia AS int)), 0) AS inadimplente,
+       COALESCE(sum(CASE WHEN em_aberto THEN saldo
+                         WHEN liquidacao > vencimento + CAST(:carencia AS int) THEN valor
+                         ELSE 0 END)
+                FILTER (WHERE vencimento + CAST(:carencia AS int) < CAST(:hoje AS date)), 0)
                                                                               AS safra_inadimplente
 FROM t
 """
 
 SQL_FAIXA = """
 SELECT count(*) AS titulos, count(DISTINCT empresa) AS empresas, COALESCE(sum(saldo), 0) AS valor
-FROM t
+FROM tr
 WHERE atraso >= CAST(:lo AS int) AND (CAST(:hi AS int) IS NULL OR atraso <= CAST(:hi AS int))
 """
 
 SQL_CONTAGEM_COBRANCA = """
 SELECT
-    count(*) FILTER (WHERE e.valor_inadimplente > 0
-                     AND COALESCE(c.status, 'sem_contato') = 'sem_contato')    AS sem_contato,
-    count(*) FILTER (WHERE c.status = 'promessa'
-                     AND c.promessa_data BETWEEN CAST(:hoje AS date)
-                                             AND CAST(:hoje AS date) + 7)      AS promessas_7_dias,
-    count(*) FILTER (WHERE c.status = 'quebrada')                              AS promessas_quebradas,
-    count(*) FILTER (WHERE c.status = 'negociacao')                            AS em_negociacao
-FROM empresas e
-LEFT JOIN tiny.cobranca_ciclos c ON c.empresa = e.empresa AND c.encerrado_em IS NULL
+    count(*) FILTER (WHERE valor_inadimplente > 0
+                     AND COALESCE(ciclo_status, 'sem_contato') = 'sem_contato') AS sem_contato,
+    count(*) FILTER (WHERE ciclo_status = 'promessa'
+                     AND promessa_data BETWEEN CAST(:hoje AS date)
+                                           AND CAST(:hoje AS date) + 7)       AS promessas_7_dias,
+    count(*) FILTER (WHERE ciclo_status = 'quebrada')                         AS promessas_quebradas,
+    count(*) FILTER (WHERE ciclo_status = 'negociacao')                       AS em_negociacao
+FROM recorte
 """
 
 
-def resumo(db: Session, hoje: date) -> ResumoDeInadimplencia:
-    p = params_base(hoje)
-    linha = db.execute(text(SQL_BASE + SQL_RESUMO), p).mappings().one()
-    cobranca = db.execute(text(SQL_BASE + SQL_CONTAGEM_COBRANCA), p).mappings().one()
+def resumo(db: Session, hoje: date, *, status: Optional[List[str]] = None, faixa: Optional[str] = None,
+           data_tipo: Optional[str] = None, data_inicio: Optional[date] = None,
+           data_fim: Optional[date] = None, sem_contato: Optional[str] = None) -> ResumoDeInadimplencia:
+    """Os cards. Seguem os filtros da lista, menos a busca por nome. A barra de faixas ignora o
+    filtro de faixa (senão escolher uma zeraria as outras); o recuperado ignora todos."""
+    recorte = dict(status=status, faixa=faixa, data_tipo=data_tipo, data_inicio=data_inicio,
+                   data_fim=data_fim, sem_contato=sem_contato)
+    p = params_do_recorte(hoje, **recorte)
+    base = SQL_BASE + SQL_RECORTE
+    linha = db.execute(text(base + SQL_RESUMO), p).mappings().one()
+    cobranca = db.execute(text(base + SQL_CONTAGEM_COBRANCA), p).mappings().one()
+    safra = db.execute(text(SQL_BASE + SQL_SAFRA), params_base(hoje)).mappings().one()
 
+    pf = params_do_recorte(hoje, **{**recorte, "faixa": None})
     faixas = []
     for nome, (lo, hi) in FAIXAS.items():
-        f = db.execute(text(SQL_BASE + SQL_FAIXA), {**p, "lo": lo, "hi": hi}).mappings().one()
+        f = db.execute(text(base + SQL_FAIXA), {**pf, "lo": lo, "hi": hi}).mappings().one()
         faixas.append(Faixa(faixa=nome, titulos=f["titulos"], empresas=f["empresas"],
                             valor=float(f["valor"])))
 
     total = float(linha["total_a_receber"])
     inad = float(linha["inadimplente"])
-    safra = float(linha["safra_inadimplente"])
+    inad_global = float(safra["inadimplente"])
+    safra_global = float(safra["safra_inadimplente"])
     return ResumoDeInadimplencia(
         total_a_receber=total,
         total_vencido=float(linha["total_vencido"]),
         em_atraso=float(linha["em_atraso"]),
         inadimplente=inad,
         inadimplencia_carteira=(inad / total) if total else 0.0,
-        recuperado=(1 - inad / safra) if safra else None,
+        recuperado=(1 - inad_global / safra_global) if safra_global else None,
         titulos_vencidos=linha["titulos_vencidos"],
         titulos_inadimplentes=linha["titulos_inadimplentes"],
         empresas_inadimplentes=linha["empresas_inadimplentes"],
@@ -240,22 +332,16 @@ ORDENACOES_DE_EMPRESAS = {
     "ultimo_contato": "ultimo_contato {d} NULLS FIRST, valor_vencido DESC",
 }
 
-SQL_LISTA = """
+SQL_LISTA = f"""
 , lista AS (
     SELECT e.*,
-           COALESCE(c.status, CASE WHEN e.valor_inadimplente > 0 THEN 'sem_contato' END) AS status,
+           {STATUS_DA_EMPRESA} AS status,
            c.promessa_data      AS proxima_data,
            c.ultimo_contato_em  AS ultimo_contato
     FROM empresas e
     LEFT JOIN tiny.cobranca_ciclos c ON c.empresa = e.empresa AND c.encerrado_em IS NULL
     WHERE (CAST(:incluir_atraso AS boolean) OR e.valor_inadimplente > 0)
-      AND (CAST(:status AS text[]) IS NULL
-           OR COALESCE(c.status, CASE WHEN e.valor_inadimplente > 0 THEN 'sem_contato' END)
-              = ANY(CAST(:status AS text[])))
-      AND (CAST(:faixa_lo AS int) IS NULL OR EXISTS (
-            SELECT 1 FROM t WHERE t.empresa = e.empresa
-               AND t.atraso >= CAST(:faixa_lo AS int)
-               AND (CAST(:faixa_hi AS int) IS NULL OR t.atraso <= CAST(:faixa_hi AS int))))
+      {FILTROS_DE_EMPRESA}
       AND (CAST(:busca AS text) IS NULL
            OR lower(e.nome) LIKE '%' || lower(CAST(:busca AS text)) || '%'
            OR (length(regexp_replace(CAST(:busca AS text), '[^0-9]', '', 'g')) >= 3
@@ -269,10 +355,12 @@ SQL_LISTA = """
 
 def pagina_de_empresas(db: Session, hoje: date, *, busca: Optional[str], status: Optional[List[str]],
                        faixa: Optional[str], incluir_atraso: bool, ordenar_por: str, direcao: str,
-                       limite: int, offset: int) -> PaginaDeEmpresas:
-    lo, hi = FAIXAS[faixa] if faixa else (None, None)
-    p = {**params_base(hoje), "busca": (busca or "").strip() or None, "status": status or None,
-         "faixa_lo": lo, "faixa_hi": hi, "incluir_atraso": incluir_atraso}
+                       limite: int, offset: int, data_tipo: Optional[str] = None,
+                       data_inicio: Optional[date] = None, data_fim: Optional[date] = None,
+                       sem_contato: Optional[str] = None) -> PaginaDeEmpresas:
+    p = {**params_do_recorte(hoje, status=status, faixa=faixa, data_tipo=data_tipo,
+                             data_inicio=data_inicio, data_fim=data_fim, sem_contato=sem_contato),
+         "busca": (busca or "").strip() or None, "incluir_atraso": incluir_atraso}
     total = db.execute(text(SQL_BASE + SQL_LISTA + "SELECT count(*) FROM lista"), p).scalar_one()
     # `direcao` entra no ORDER BY, que não aceita bind param: só ASC ou DESC chegam ao SQL.
     d = "DESC" if str(direcao).lower() == "desc" else "ASC"

@@ -1,5 +1,5 @@
 import hashlib
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.orm import Session
@@ -322,3 +322,112 @@ def test_pagina_traz_o_ciclo_aberto_e_filtra_por_status(limpa_cobranca, db, cont
     assert alfa.ultimo_contato.replace(tzinfo=None) == contato
     assert [e.empresa for e in _pagina(db, status=["promessa"]).itens] == ["11111111"]
     assert [e.empresa for e in _pagina(db, status=["sem_contato"]).itens] == ["22222222"]
+
+
+# ─────────────────────────────────────────────────────── filtros de data e de contato
+
+def _resumo(db, **kw):
+    from app.core.inadimplencia import resumo
+
+    return resumo(db, HOJE, **kw)
+
+
+def test_filtro_de_vencimento_recorta_titulos_e_valores(db, contas):
+    contas(doc="11111111000111", venceu_ha=40, valor=100)
+    contas(doc="11111111000111", venceu_ha=100, valor=200)
+    ini, fim = HOJE - timedelta(days=50), HOJE - timedelta(days=30)
+    p = _pagina(db, data_tipo="vencimento", data_inicio=ini, data_fim=fim)
+    e = p.itens[0]
+    assert (e.titulos, e.valor_devido, e.maior_atraso) == (1, 100, 40)
+    r = _resumo(db, data_tipo="vencimento", data_inicio=ini, data_fim=fim)
+    assert r.total_a_receber == 100 and r.total_vencido == 100 and r.inadimplente == 100
+    assert r.titulos_vencidos == 1
+    # sem filtro, tudo
+    assert _pagina(db).itens[0].valor_devido == 300
+    assert _resumo(db).total_a_receber == 300
+
+
+def test_filtro_de_vencimento_que_zera_a_empresa_a_tira_da_lista(db, contas):
+    contas(venceu_ha=40)
+    p = _pagina(db, data_tipo="vencimento", data_inicio=HOJE - timedelta(days=5), data_fim=HOJE)
+    assert p.total == 0
+
+
+def test_filtro_de_emissao_usa_a_data_de_emissao(db, contas):
+    contas(doc="11111111000111", venceu_ha=40, valor=100, emissao_ha=10)   # emitido há 50
+    contas(doc="11111111000111", venceu_ha=40, valor=200, emissao_ha=60)   # emitido há 100
+    ini, fim = HOJE - timedelta(days=120), HOJE - timedelta(days=80)  # so a de emissao -100
+    e = _pagina(db, data_tipo="emissao", data_inicio=ini, data_fim=fim).itens[0]
+    assert (e.titulos, e.valor_devido) == (1, 200)
+    assert _resumo(db, data_tipo="emissao", data_inicio=ini, data_fim=fim).total_a_receber == 200
+
+
+def test_data_so_com_inicio_ou_so_com_fim(db, contas):
+    contas(doc="11111111000111", venceu_ha=40, valor=100)
+    contas(doc="11111111000111", venceu_ha=100, valor=200)
+    corte = HOJE - timedelta(days=60)
+    assert _pagina(db, data_tipo="vencimento", data_inicio=corte).itens[0].valor_devido == 100
+    assert _pagina(db, data_tipo="vencimento", data_fim=corte).itens[0].valor_devido == 200
+
+
+def test_filtro_de_promessa_recorta_empresas_sem_mudar_valores(limpa_cobranca, db, contas, engine):
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=40, valor=100)
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=100, valor=50)
+    contas(nome="Beta", doc="22222222000122", venceu_ha=40, valor=700)
+    _ciclo(engine, "11111111", "promessa", promessa_data=HOJE + timedelta(days=3))
+    _ciclo(engine, "22222222", "promessa", promessa_data=HOJE + timedelta(days=20))
+    p = _pagina(db, data_tipo="promessa", data_inicio=HOJE, data_fim=HOJE + timedelta(days=7))
+    assert [e.empresa for e in p.itens] == ["11111111"]
+    assert p.itens[0].valor_devido == 150  # a dívida inteira
+    r = _resumo(db, data_tipo="promessa", data_inicio=HOJE, data_fim=HOJE + timedelta(days=7))
+    assert r.total_vencido == 150 and r.promessas_7_dias == 1 and r.sem_contato == 0
+
+
+def test_filtro_de_contato_usa_o_dia_no_fuso_da_empresa(limpa_cobranca, db, contas, engine):
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=40, valor=100)
+    contas(nome="Beta", doc="22222222000122", venceu_ha=40, valor=700)
+    # 01h UTC de HOJE ainda e a noite de ontem em Sao Paulo
+    _ciclo(engine, "11111111", "em_contato",
+           ultimo_contato=datetime(HOJE.year, HOJE.month, HOJE.day, 1, tzinfo=timezone.utc))
+    _ciclo(engine, "22222222", "em_contato", ultimo_contato=datetime.now(timezone.utc) - timedelta(days=30))
+    ontem = HOJE - timedelta(days=1)
+    p = _pagina(db, data_tipo="contato", data_inicio=ontem, data_fim=ontem)
+    assert [e.empresa for e in p.itens] == ["11111111"]
+    assert p.itens[0].valor_devido == 100
+
+
+def test_sem_contato_ha_mais_de_n_dias_inclui_quem_nunca_foi_contatado(limpa_cobranca, db, contas, engine):
+    agora = datetime.now(timezone.utc)
+    for doc in ("11111111000111", "22222222000122", "33333333000133", "44444444000144"):
+        contas(nome="E" + doc[:2], doc=doc, venceu_ha=40)
+    _ciclo(engine, "11111111", "em_contato", ultimo_contato=agora - timedelta(days=3))    # recente
+    _ciclo(engine, "22222222", "em_contato", ultimo_contato=agora - timedelta(days=20))   # 20 dias
+    _ciclo(engine, "33333333", "em_contato")                                              # ciclo sem contato
+    # 4444...: sem ciclo
+    def quem(v):
+        return {e.empresa for e in _pagina(db, sem_contato=v).itens}
+    assert quem("7") == {"22222222", "33333333", "44444444"}
+    assert quem("15") == {"22222222", "33333333", "44444444"}
+    assert quem("30") == {"33333333", "44444444"}
+    assert quem("nunca") == {"33333333", "44444444"}
+    assert _resumo(db, sem_contato="nunca").empresas_inadimplentes == 2
+
+
+def test_resumo_segue_status_e_faixa_mas_a_barra_de_faixas_continua_navegavel(db, contas):
+    contas(doc="11111111000111", venceu_ha=40, valor=100)
+    contas(doc="22222222000122", venceu_ha=100, valor=200)
+    r = _resumo(db, faixa="31_60")
+    assert r.total_vencido == 100
+    faixas = {f.faixa: f.valor for f in r.faixas}
+    assert faixas["31_60"] == 100 and faixas["90_mais"] == 200
+    assert _resumo(db, status=["promessa"]).total_vencido == 0
+
+
+def test_recuperado_nao_segue_o_filtro(db, contas):
+    contas(doc="11111111000111", venceu_ha=200, valor=300, pago_dias_depois=40)
+    contas(doc="11111111000111", venceu_ha=200, valor=100)
+    contas(doc="22222222000122", venceu_ha=5, valor=10)
+    filtro = dict(data_tipo="vencimento", data_inicio=HOJE - timedelta(days=10), data_fim=HOJE)
+    assert _resumo(db, **filtro).total_vencido == 10
+    assert _resumo(db, **filtro).recuperado == pytest.approx(0.75)
+    assert _resumo(db, **filtro).recuperado == _resumo(db).recuperado
