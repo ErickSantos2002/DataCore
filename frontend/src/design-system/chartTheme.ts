@@ -37,6 +37,12 @@ export const chartTheme = {
       color: token("--text-body", "#1e293b"),
     };
   },
+  /** Cor do item do tooltip padrão. O recharts pinta o item com a cor da série e,
+   *  quando a barra é colorida por `<Cell>` (sem `fill` na `<Bar>`), cai em `#000`:
+   *  texto preto sobre o fundo escuro no tema escuro (Taxa mensal, 09/10). */
+  get tooltipItem() {
+    return { color: token("--text-body", "#1e293b") };
+  },
   get series() {
     return [
       token("--color-primary-500", "#1f89ca"),

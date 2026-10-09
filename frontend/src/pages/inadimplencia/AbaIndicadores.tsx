@@ -64,7 +64,7 @@ export function AbaIndicadores({ ativo }: { ativo: boolean }) {
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke={chartTheme.grid.stroke} />
                 <XAxis dataKey="rotulo" tick={{ fill: chartTheme.axis.stroke, fontSize: 12 }} axisLine={{ stroke: chartTheme.grid.stroke }} />
                 <YAxis tickFormatter={(v: number) => `${v}%`} tick={{ fill: chartTheme.axis.stroke, fontSize: 12 }} axisLine={{ stroke: chartTheme.grid.stroke }} />
-                <Tooltip contentStyle={chartTheme.tooltip} formatter={(_v, _n, p: { payload?: MesDeTaxa }) => [p.payload ? textoDoTooltip(p.payload) : "", ""]} />
+                <Tooltip contentStyle={chartTheme.tooltip} itemStyle={chartTheme.tooltipItem} formatter={(_v, _n, p: { payload?: MesDeTaxa }) => [p.payload ? textoDoTooltip(p.payload) : "", ""]} />
                 {i.media_12_meses !== null ? <ReferenceLine y={i.media_12_meses * 100} strokeDasharray="6 4" stroke="var(--action)" label="média 12 meses" /> : null}
                 <Bar dataKey="pct" radius={[3, 3, 0, 0]}>
                   {dados.map((m) => <Cell key={m.mes} fill={m.em_apuracao ? "var(--color-slate-300)" : "var(--color-danger-500)"} />)}

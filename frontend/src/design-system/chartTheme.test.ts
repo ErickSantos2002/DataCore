@@ -8,6 +8,10 @@ describe("tema de grafico", () => {
     expect(chartTheme.tooltip).toBeTruthy();
   });
 
+  it("o item do tooltip tem a cor do texto, nao o preto padrao do recharts", () => {
+    expect(chartTheme.tooltipItem.color).toBe(chartTheme.tooltip.color);
+  });
+
   it("a rampa de series tem seis cores distintas", () => {
     const cores = chartTheme.series;
     expect(cores).toHaveLength(6);

@@ -169,6 +169,7 @@ export function GraficosDaVisaoGeral({
                   />
                   <Tooltip
                     contentStyle={chartTheme.tooltip}
+                    itemStyle={chartTheme.tooltipItem}
                     formatter={(valor) => [
                       formatarVariacao(valor as number | null),
                       "Variação",
