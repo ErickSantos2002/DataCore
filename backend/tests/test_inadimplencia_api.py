@@ -112,3 +112,27 @@ def test_observacao(client, financeiro, contas):
                    headers=financeiro.headers)
     assert r.status_code == 200
     assert r.json()["observacao"] == "Só boleto"
+
+
+def test_chave_sem_documento_com_barra_e_alcancavel(client, financeiro, contas):
+    contas(nome="A/B Ltda", doc="", venceu_ha=40)
+    itens = client.get("/inadimplencia/empresas", headers=financeiro.headers).json()["itens"]
+    chave = itens[0]["empresa"]
+    assert chave.startswith("nome:") and "/" not in chave
+    assert client.get(f"/inadimplencia/empresas/{chave}", headers=financeiro.headers).status_code == 200
+
+
+def test_anotacao_longa_vira_422_em_portugues(client, financeiro, contas):
+    contas(venceu_ha=40)
+    r = client.post("/inadimplencia/empresas/11111111/eventos", headers=financeiro.headers,
+                    json=_contato(anotacao="x" * 4001))
+    assert r.status_code == 422
+    assert isinstance(r.json()["detail"], str) and "4.000" in r.json()["detail"]
+
+
+def test_observacao_longa_vira_422_em_portugues(client, financeiro, contas):
+    contas(venceu_ha=40)
+    r = client.put("/inadimplencia/empresas/11111111/observacao", json={"texto": "x" * 4001},
+                   headers=financeiro.headers)
+    assert r.status_code == 422
+    assert isinstance(r.json()["detail"], str) and "4.000" in r.json()["detail"]

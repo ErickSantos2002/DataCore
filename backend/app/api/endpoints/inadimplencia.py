@@ -7,7 +7,7 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core import inadimplencia as consultas
@@ -83,7 +83,7 @@ def indicadores(db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)
 
 
 class TextoDaObservacao(BaseModel):
-    texto: str = Field("", max_length=4000)
+    texto: str = ""
 
 
 @router.post("/empresas/{empresa}/eventos", response_model=consultas.DetalheDaEmpresa)

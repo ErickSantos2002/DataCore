@@ -56,8 +56,7 @@ class NovoEvento(BaseModel):
     def _tamanho(cls, v):
         if v is None:
             return None
-        if len(v) > 4000:
-            raise ValueError("A anotação passa de 4.000 caracteres.")
+        # o limite de 4.000 é checado em registrar_evento, para o 422 sair em português
         return v.strip() or None
 
 
@@ -157,6 +156,8 @@ def registrar_evento(db: Session, hoje: date, empresa: str, dados: NovoEvento, u
     if valores is None and ciclo is None:
         raise ErroDeCobranca("Empresa sem título vencido em aberto.", 404)
 
+    if dados.anotacao is not None and len(dados.anotacao) > 4000:
+        raise ErroDeCobranca("A anotação passa de 4.000 caracteres.")
     novo = dados.status_novo
     if novo in STATUS_DO_SISTEMA:
         raise ErroDeCobranca("Este status é posto pelo sistema, não à mão.")

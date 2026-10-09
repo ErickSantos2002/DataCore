@@ -59,7 +59,7 @@ t AS (
     SELECT *,
            CASE WHEN length(doc) = 14 THEN left(doc, 8)
                 WHEN length(doc) = 11 THEN doc
-                ELSE 'nome' || chr(58) || lower(trim(COALESCE(cliente_nome, '')))
+                ELSE 'nome' || chr(58) || md5(lower(trim(COALESCE(cliente_nome, ''))))
            END AS empresa,
            NOT quitada AS em_aberto,
            CASE WHEN NOT quitada AND vencimento < CAST(:hoje AS date)
@@ -83,6 +83,8 @@ empresas AS (
 )
 """
 # `chr(58)` é o dois-pontos: escrito literal dentro de `text()` ele vira bind param.
+# Sem documento, a chave é `nome:` + md5 do nome normalizado (minúsculo, sem espaços das pontas):
+# o nome cru podia ter "/" e a rota nunca o alcançaria (o Starlette decodifica %2F antes de rotear).
 
 
 def documento_exibido(empresa: str, filiais: int, cnpj_unico: Optional[str]) -> Optional[str]:

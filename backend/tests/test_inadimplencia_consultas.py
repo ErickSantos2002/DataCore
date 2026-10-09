@@ -1,3 +1,4 @@
+import hashlib
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -63,7 +64,7 @@ def test_cpf_e_documento_vazio(db, contas):
     contas(nome="Pessoa Física", doc="00000000191", venceu_ha=40)
     contas(nome=" Sem Documento ", doc="", venceu_ha=40)
     chaves = {e.empresa for e in _pagina(db).itens}
-    assert chaves == {"00000000191", "nome:sem documento"}
+    assert chaves == {"00000000191", "nome:" + hashlib.md5(b"sem documento").hexdigest()}
 
 
 def test_cancelada_excluida_e_quitada_nao_entram(db, contas):
