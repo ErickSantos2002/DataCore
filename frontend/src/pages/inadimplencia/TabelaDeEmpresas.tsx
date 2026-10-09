@@ -106,7 +106,16 @@ export function TabelaDeEmpresas(props: TabelaDeEmpresasProps) {
             empresas.map((e) => (
               <TableRow key={e.empresa} clickable onClick={() => onAbrir(e.empresa)}>
                 <TableCell className="min-w-[200px]">
-                  <p className="font-medium">{e.nome}</p>
+                  <button
+                    type="button"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      onAbrir(e.empresa);
+                    }}
+                    className="text-left font-medium hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {e.nome}
+                  </button>
                   {e.documento ? (
                     <p className="font-mono text-xs text-conteudo-muted">{e.documento}</p>
                   ) : null}
