@@ -38,6 +38,7 @@ const ROTAS = [
   "/financeiro",
   "/contas-pagar",
   "/contas-receber",
+  "/inadimplencia",
 ] as const;
 
 type Rota = (typeof ROTAS)[number];
@@ -66,6 +67,7 @@ const PERFIS: ReadonlyArray<{
       "/servicos",
       "/contas-pagar",
       "/contas-receber",
+      "/inadimplencia",
       "/usuarios",
       "/importacoes",
       "/configuracoes",
@@ -103,6 +105,7 @@ const PERFIS: ReadonlyArray<{
       "/servicos",
       "/contas-pagar",
       "/contas-receber",
+      "/inadimplencia",
     ],
   },
   {

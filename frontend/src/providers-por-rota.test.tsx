@@ -73,6 +73,9 @@ vi.mock("./pages/ContasPagar", () => ({
 vi.mock("./pages/ContasReceber", () => ({
   default: () => "pagina:/contas-receber",
 }));
+vi.mock("./pages/Inadimplencia", () => ({
+  default: () => "pagina:/inadimplencia",
+}));
 vi.mock("./pages/Usuarios", () => ({ default: () => "pagina:/usuarios" }));
 vi.mock("./pages/Configuracoes", () => ({
   default: () => "pagina:/configuracoes",
@@ -131,6 +134,7 @@ const ESPERADO: ReadonlyArray<readonly [string, readonly string[]]> = [
   ["/servicos", []],
   ["/contas-pagar", []],
   ["/contas-receber", []],
+  ["/inadimplencia", []],
   ["/configuracoes", ["Configuracoes"]],
   ["/dashboard", ["Configuracoes", "Dashboard"]],
   // Servicos e Vendas saíram daqui quando a tela passou a ler o faturamento

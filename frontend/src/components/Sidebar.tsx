@@ -70,6 +70,7 @@ export default function useNavGroups(): NavGroup[] {
         { label: "Gerenciamento", path: "/financeiro", icon: "chart" },
         { label: "Contas a pagar", path: "/contas-pagar", icon: "tag" },
         { label: "Contas a receber", path: "/contas-receber", icon: "tag" },
+        { label: "Inadimplência", path: "/inadimplencia", icon: "warning" },
         {
           label: "Locação",
           path: "/locacao",

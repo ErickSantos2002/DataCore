@@ -67,6 +67,7 @@ describe("useNavGroups", () => {
       "Gerenciamento",
       "Contas a pagar",
       "Contas a receber",
+      "Inadimplência",
       "Locação",
     ]);
     expect(result.current[3].items.map((i) => i.label)).toEqual([
@@ -120,6 +121,7 @@ describe("useNavGroups", () => {
     expect(financeiro?.items.map((i) => i.label)).toEqual([
       "Contas a pagar",
       "Contas a receber",
+      "Inadimplência",
     ]);
   });
 

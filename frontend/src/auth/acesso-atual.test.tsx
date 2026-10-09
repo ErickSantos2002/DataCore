@@ -44,6 +44,9 @@ vi.mock("../pages/ContasPagar", () => ({
 vi.mock("../pages/ContasReceber", () => ({
   default: () => "pagina:/contas-receber",
 }));
+vi.mock("../pages/Inadimplencia", () => ({
+  default: () => "pagina:/inadimplencia",
+}));
 vi.mock("../pages/Usuarios", () => ({ default: () => "pagina:/usuarios" }));
 vi.mock("../pages/Configuracoes", () => ({
   default: () => "pagina:/configuracoes",
@@ -72,6 +75,7 @@ const ROTAS = [
   "/financeiro",
   "/contas-pagar",
   "/contas-receber",
+  "/inadimplencia",
 ] as const;
 
 type Rota = (typeof ROTAS)[number];
@@ -161,6 +165,7 @@ const PERFIS: ReadonlyArray<{
       "/servicos",
       "/contas-pagar",
       "/contas-receber",
+      "/inadimplencia",
       "/usuarios",
       "/configuracoes",
     ],
@@ -197,6 +202,7 @@ const PERFIS: ReadonlyArray<{
       "/servicos",
       "/contas-pagar",
       "/contas-receber",
+      "/inadimplencia",
     ],
   },
   {

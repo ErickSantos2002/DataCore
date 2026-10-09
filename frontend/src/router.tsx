@@ -31,6 +31,7 @@ const Usuarios = lazy(() => import("./pages/Usuarios"));
 const Importacoes = lazy(() => import("./pages/Importacoes"));
 const ContasPagar = lazy(() => import("./pages/ContasPagar"));
 const ContasReceber = lazy(() => import("./pages/ContasReceber"));
+const Inadimplencia = lazy(() => import("./pages/Inadimplencia"));
 
 /**
  * Rotas e, junto delas, os providers de dados de cada ramo.
@@ -221,6 +222,17 @@ const AppRoutes: React.FC = () => (
           <ProtectedRoute>
             <RequirePermissao rota="/contas-receber">
               <ContasReceber />
+            </RequirePermissao>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/inadimplencia"
+        element={
+          <ProtectedRoute>
+            <RequirePermissao rota="/inadimplencia">
+              <Inadimplencia />
             </RequirePermissao>
           </ProtectedRoute>
         }

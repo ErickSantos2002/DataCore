@@ -57,6 +57,9 @@ export const PERMISSOES: Record<string, Regra> = {
 
   "/contas-pagar": { tipo: "papeis", papeis: ["admin", "financeiro"] },
   "/contas-receber": { tipo: "papeis", papeis: ["admin", "financeiro"] },
+  // Inadimplência: nome de cliente, valor devido e conversa de cobrança. A API
+  // também barra (exigir_papeis) — esta linha só decide o menu e o guarda.
+  "/inadimplencia": { tipo: "papeis", papeis: ["admin", "financeiro"] },
 
   "/usuarios": { tipo: "papeis", papeis: ["admin"] },
   // Tela de operação: horário de timer, duração de carga, erro de API do Tiny.
