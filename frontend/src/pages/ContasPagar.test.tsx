@@ -506,7 +506,9 @@ async function definirData(rotulo: "Data Início" | "Data Fim", valor: string) {
 }
 
 function seletorDePreset(): HTMLSelectElement {
-  return within(painelDeFiltros()).getByRole("combobox") as HTMLSelectElement;
+  return within(filtro("Período Rápido")).getByRole(
+    "combobox",
+  ) as HTMLSelectElement;
 }
 
 async function escolherPreset(valor: string) {
@@ -856,7 +858,7 @@ describe("Contas a Pagar — KPIs", () => {
     // Valor e saldo propositalmente diferentes: assim a asserção do "em
     // aberto" só fecha se ele estiver mesmo somando o SALDO.
     await montar([
-      conta({ id: 1, valor: "100.00", saldo: "10.00", situacao: "cancelado" }),
+      conta({ id: 1, valor: "100.00", saldo: "10.00", situacao: "em análise" }),
       conta({ id: 2, valor: "200.00", saldo: "20.00", situacao: "" }),
       conta({ id: 3, valor: "300.00", saldo: "30.00", situacao: null }),
     ]);
@@ -978,10 +980,10 @@ describe("Contas a Pagar — situação na tabela", () => {
 
   it("situação desconhecida aparece como veio da API", async () => {
     await montar([
-      conta({ id: 1, vencimento: "2026-12-01", situacao: "cancelado" }),
+      conta({ id: 1, vencimento: "2026-12-01", situacao: "em análise" }),
     ]);
 
-    expect(celulasDaLinha(linhasDaTabela()[0])[7]).toBe("cancelado");
+    expect(celulasDaLinha(linhasDaTabela()[0])[7]).toBe("em análise");
   });
 
   it("situação nula vira travessão curto, e a categoria nula também", async () => {

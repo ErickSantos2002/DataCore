@@ -86,6 +86,7 @@ export function TelaDeContas({ tipo, configuracao }: TelaDeContasProps) {
   const [filtroSituacao, setFiltroSituacao] = useState<string[]>([]);
   const [filtroCategoria, setFiltroCategoria] = useState<string[]>([]);
   const [filtroContraparte, setFiltroContraparte] = useState<string[]>([]);
+  const [filtroPrazo, setFiltroPrazo] = useState("");
   const {
     preset,
     escolherPreset: setPreset,
@@ -105,8 +106,16 @@ export function TelaDeContas({ tipo, configuracao }: TelaDeContasProps) {
       contraparte: filtroContraparte,
       dataInicio,
       dataFim,
+      prazo: filtroPrazo,
     }),
-    [filtroSituacao, filtroCategoria, filtroContraparte, dataInicio, dataFim],
+    [
+      filtroSituacao,
+      filtroCategoria,
+      filtroContraparte,
+      dataInicio,
+      dataFim,
+      filtroPrazo,
+    ],
   );
 
   // Os KPIs e os três gráficos, somados pelo banco sobre o recorte inteiro.
@@ -238,6 +247,10 @@ export function TelaDeContas({ tipo, configuracao }: TelaDeContasProps) {
           }}
           onContraparte={(valores) => {
             setFiltroContraparte(valores);
+            setPagina(1);
+          }}
+          onPrazo={(valor) => {
+            setFiltroPrazo(valor);
             setPagina(1);
           }}
           onPreset={(valor) => {

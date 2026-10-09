@@ -65,6 +65,7 @@ export function paramsDosFiltros(filtros: FiltrosDeContas): FiltrosDeContasAPI {
   if (filtros.contraparte.length) params.contraparte = filtros.contraparte;
   if (filtros.dataInicio) params.data_inicio = filtros.dataInicio;
   if (filtros.dataFim) params.data_fim = filtros.dataFim;
+  if (filtros.prazo) params.prazo = filtros.prazo;
   return params;
 }
 

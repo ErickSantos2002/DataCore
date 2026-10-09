@@ -63,8 +63,11 @@ export interface DialetoDoServidor {
   quitadas: readonly string[];
 }
 
+/** Cancelada não soma no aberto, não vence e não está a vencer. */
+const CANCELADAS = ["cancelada", "cancelado"];
+
 /** `vencida` usa a lista fixa nas DUAS telas, e não o dialeto de cada uma. */
-const NAO_VENCEM = ["pago", "recebido"];
+const NAO_VENCEM = ["pago", "recebido", ...CANCELADAS];
 
 // O fixture ainda escreve o valor como TEXTO, nas duas convenções, porque era
 // assim que a API antiga o entregava. `converterParaNumero` é a conversão de
@@ -115,7 +118,10 @@ export function criarServidorDeContas(
 
   // As três grandezas, como em `core/contas_agregado.py`.
   const quitadoDe = (c: ContaDaTela) => c.valor - c.saldo;
-  const abertoDe = (c: ContaDaTela) => (c.quitada ? 0 : c.saldo);
+  const cancelada = (c: ContaDaTela) =>
+    CANCELADAS.includes((c.situacao ?? "").toLowerCase());
+  const abertoDe = (c: ContaDaTela) =>
+    c.quitada || cancelada(c) ? 0 : c.saldo;
   const faturadoDe = (c: ContaDaTela) => quitadoDe(c) + abertoDe(c);
 
   const emLista = (valor: string | null, lista: string[] | undefined) =>
@@ -126,7 +132,16 @@ export function criarServidorDeContas(
       const inicio = params.data_inicio as string | undefined;
       const fim = params.data_fim as string | undefined;
       const emissao = c.emissao ?? "";
+      const prazo = params.prazo as string | undefined;
+      const naoVence = NAO_VENCEM.includes((c.situacao ?? "").toLowerCase());
+      const hoje = new Date(agora());
+      hoje.setHours(0, 0, 0, 0);
+      const [a, m, d] = (c.vencimento ?? "").split("-").map(Number);
+      const vence = new Date(a, m - 1, d);
       return (
+        (!prazo ||
+          (!naoVence &&
+            (prazo === "vencidas" ? vence < hoje : vence >= hoje))) &&
         emLista(c.situacao, params.situacao as string[]) &&
         emLista(c.categoria, params.categoria as string[]) &&
         emLista(c.cliente_nome, params.contraparte as string[]) &&
@@ -204,7 +219,7 @@ export function criarServidorDeContas(
         total_quitado: totalQuitado,
         contas_vencidas: contas.filter((c) => c.vencida).length,
         a_vencer_30: contas.filter((c) => {
-          if (c.quitada || !c.vencimento) return false;
+          if (c.quitada || cancelada(c) || !c.vencimento) return false;
           const [ano, mes, dia] = c.vencimento.split("-").map(Number);
           const vence = new Date(ano, mes - 1, dia);
           return vence >= hoje && vence <= em30;

@@ -76,6 +76,7 @@ const SEM_FILTRO = {
   contraparte: [],
   dataInicio: "",
   dataFim: "",
+  prazo: "",
 };
 
 function EspiaoDeReceber() {

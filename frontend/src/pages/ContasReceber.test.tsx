@@ -908,7 +908,7 @@ describe("Contas a Receber — situação", () => {
         vencimento: "2026-12-01",
         valor: "900",
         saldo: "700",
-        situacao: "cancelado",
+        situacao: "em análise",
       }),
     ]);
 
@@ -916,7 +916,7 @@ describe("Contas a Receber — situação", () => {
     // Os 200 que já entraram contam mesmo com a situação desconhecida: o
     // recebido é `valor − saldo`, e não depende de a conta estar quitada.
     expect(kpi("Total Recebido")).toBe("R$ 200,00");
-    expect(celulasDaLinha(linhasDaTabela()[0])[7]).toBe("cancelado");
+    expect(celulasDaLinha(linhasDaTabela()[0])[7]).toBe("em análise");
   });
 
   it("situação vazia entra no aberto e mostra o travessão, igual à nula", async () => {
@@ -1207,6 +1207,86 @@ describe("Contas a Receber — filtro por data", () => {
     // A data de fim que o preset tinha posto continua lá.
     expect(campoDeData("Data Fim").value).toBe("2026-08-31");
     expect(idsNaTela()).toEqual(["101", "102", "103", "104", "105", "106"]);
+  });
+});
+
+describe("Contas a Receber — cancelada e filtro de vencimento", () => {
+  async function escolherPrazo(valor: string) {
+    fireEvent.change(
+      within(blocoDoFiltro("Vencimento")).getByRole("combobox"),
+      { target: { value: valor } },
+    );
+    await assentar();
+  }
+
+  it("conta cancelada não entra no Total a Receber nem nas vencidas", async () => {
+    // Até 09/10/2026 a cancelada caía no aberto pelo saldo inteiro e, com o
+    // vencimento no passado, ainda contava como vencida.
+    await montar([
+      conta({
+        id: 1,
+        vencimento: "2026-01-01",
+        valor: "900",
+        saldo: "900",
+        situacao: "cancelada",
+      }),
+      conta({
+        id: 2,
+        vencimento: "2026-09-10",
+        valor: "500",
+        saldo: "500",
+        situacao: "cancelada",
+      }),
+      conta({
+        id: 3,
+        vencimento: "2026-01-01",
+        valor: "300",
+        saldo: "300",
+        situacao: "aberto",
+      }),
+    ]);
+
+    expect(kpi("Total a Receber")).toBe("R$ 300,00");
+    expect(kpi("Total Recebido")).toBe("R$ 0,00");
+    expect(kpi("Contas Vencidas")).toBe("1");
+    expect(kpi("A Vencer (30 dias)")).toBe("0");
+  });
+
+  it("Vencidas mostra só as que venceram antes de hoje e não foram quitadas", async () => {
+    await montar();
+    await escolherPrazo("vencidas");
+
+    expect(idsNaTela()).toEqual(["103"]);
+    expect(kpi("Total a Receber")).toBe("R$ 300,00");
+  });
+
+  it("A vencer mostra as em aberto de hoje em diante — inclusive a que vence hoje", async () => {
+    await montar();
+    await escolherPrazo("a_vencer");
+
+    expect(idsNaTela()).toEqual(["104", "105", "106"]);
+    expect(kpi("Contas Vencidas")).toBe("0");
+  });
+
+  it("cancelada não aparece em Vencidas nem em A vencer", async () => {
+    await montar([
+      conta({
+        id: 1,
+        vencimento: "2026-01-01",
+        saldo: "10",
+        situacao: "cancelada",
+      }),
+      conta({
+        id: 2,
+        vencimento: "2026-12-01",
+        saldo: "10",
+        situacao: "cancelada",
+      }),
+    ]);
+    await escolherPrazo("vencidas");
+    expect(idsNaTela()).toEqual([]);
+    await escolherPrazo("a_vencer");
+    expect(idsNaTela()).toEqual([]);
   });
 });
 

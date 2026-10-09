@@ -52,9 +52,20 @@ from sqlalchemy.orm import Session
 QUITADAS_A_PAGAR = ["pago"]
 QUITADAS_A_RECEBER = ["recebido", "pago"]
 
+# Conta cancelada no Tiny não é dívida de ninguém: não soma no aberto, não
+# vence e não está "a vencer". Até 09/10/2026 ela caía no `else saldo` e entrava
+# inteira no "Total a Receber" — medido: 28 contas, R$ 79,5 mil, todas também
+# contadas como vencidas. O Tiny grava `cancelada`; `cancelado` fica por garantia.
+SITUACOES_CANCELADAS = ["cancelada", "cancelado"]
+
 # `vencida` é a mesma conta nas duas telas, e não a do dialeto. Ver o aviso no
-# topo deste módulo.
-SITUACOES_QUE_NAO_VENCEM = ["pago", "recebido"]
+# topo deste módulo. A cancelada entrou aqui em 09/10/2026, pelo motivo acima.
+SITUACOES_QUE_NAO_VENCEM = ["pago", "recebido", *SITUACOES_CANCELADAS]
+
+# O filtro de prazo da tela: `vencidas` é exatamente a regra do KPI "Contas
+# Vencidas" (e do selo vermelho da tabela); `a_vencer` é o complemento dela —
+# ainda não quitada nem cancelada, com vencimento de hoje em diante.
+PRAZOS_DE_CONTAS = ("vencidas", "a_vencer")
 
 
 class KpisDeContas(BaseModel):
@@ -103,7 +114,7 @@ class ResumoDeContas(BaseModel):
 
 
 def _clausulas(campo_emissao: str) -> str:
-    """Os cinco filtros da tela, na mesma ordem em que ela os aplica.
+    """Os seis filtros da tela, na mesma ordem em que ela os aplica.
 
     `CAST()` e nunca o operador de cast com dois-pontos: em `text()` do
     SQLAlchemy os dois-pontos iniciam um bind param, e o cast viraria um
@@ -128,6 +139,12 @@ def _clausulas(campo_emissao: str) -> str:
            OR {campo_emissao} >= CAST(:data_inicio AS date))
       AND (CAST(:data_fim AS date) IS NULL
            OR {campo_emissao} <= CAST(:data_fim AS date))
+      AND (CAST(:prazo AS text) IS NULL
+           OR (lower(COALESCE(situacao, '')) <> ALL(CAST(:nao_vencem AS text[]))
+               AND CASE CAST(:prazo AS text)
+                     WHEN 'vencidas' THEN vencimento < CAST(:hoje AS date)
+                     WHEN 'a_vencer' THEN vencimento >= CAST(:hoje AS date)
+                   END))
     """
 
 
@@ -152,14 +169,15 @@ WITH filtradas AS (
            historico,
            COALESCE(valor, 0) AS valor,
            COALESCE(saldo, 0) AS saldo,
-           lower(COALESCE(situacao, '')) = ANY(CAST(:quitadas AS text[])) AS quitada
+           lower(COALESCE(situacao, '')) = ANY(CAST(:quitadas AS text[])) AS quitada,
+           lower(COALESCE(situacao, '')) = ANY(CAST(:canceladas AS text[])) AS cancelada
     FROM tiny.{tabela}
     {_clausulas(campo_emissao)}
 ),
 contas AS (
     SELECT *,
            valor - saldo                              AS quitado,
-           CASE WHEN quitada THEN 0 ELSE saldo END    AS aberto
+           CASE WHEN quitada OR cancelada THEN 0 ELSE saldo END AS aberto
     FROM filtradas
 )
 """
@@ -177,6 +195,7 @@ SELECT COALESCE(SUM(quitado), 0) AS total_quitado,
            WHERE vencimento >= CAST(:hoje AS date)
              AND vencimento <= CAST(:hoje AS date) + 30
              AND NOT quitada
+             AND NOT cancelada
        )                         AS a_vencer_30,
        -- O divisor é o número de meses DISTINTOS de emissão, como sempre foi:
        -- a média mensal faturada, coerente com o divisor ser mês de emissão.
@@ -250,6 +269,7 @@ def resumo_de_contas(
     data_inicio: Optional[date],
     data_fim: Optional[date],
     hoje: date,
+    prazo: Optional[str] = None,
 ) -> ResumoDeContas:
     """Os quatro recortes que a tela desenha, para um mesmo filtro."""
     base = _base(tabela, campo_emissao)
@@ -261,6 +281,8 @@ def resumo_de_contas(
         "contrapartes": contrapartes or None,
         "data_inicio": data_inicio,
         "data_fim": data_fim,
+        "prazo": prazo,
+        "canceladas": SITUACOES_CANCELADAS,
         "hoje": hoje,
     }
 
@@ -456,6 +478,7 @@ def pagina_de_contas(
     offset: int,
     hoje: date,
     colunas_extras: Optional[List[str]] = None,
+    prazo: Optional[str] = None,
 ) -> PaginaDeContas:
     """Uma página da tabela, filtrada, buscada e ordenada pelo banco.
 
@@ -472,6 +495,8 @@ def pagina_de_contas(
         "data_inicio": data_inicio,
         "data_fim": data_fim,
         "busca": (busca or "").strip() or None,
+        "prazo": prazo,
+        "canceladas": SITUACOES_CANCELADAS,
         "nao_vencem": SITUACOES_QUE_NAO_VENCEM,
         "hoje": hoje,
     }

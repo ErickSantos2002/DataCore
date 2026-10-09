@@ -84,7 +84,20 @@ export interface FiltrosDeContas {
   contraparte: string[];
   dataInicio: string;
   dataFim: string;
+  /** "" (todas), "vencidas" ou "a_vencer" — a regra é a do KPI "Contas Vencidas". */
+  prazo: string;
 }
+
+/**
+ * As opções do filtro de prazo. "Vencidas" é a mesma conta do KPI e do selo
+ * vermelho da tabela; "A vencer" é o complemento — nem quitada nem cancelada,
+ * vencendo de hoje em diante. Quem decide é o banco (`core/contas_agregado.py`).
+ */
+export const PRAZOS_DE_CONTAS = [
+  { value: "", label: "Todas" },
+  { value: "vencidas", label: "Vencidas" },
+  { value: "a_vencer", label: "A vencer" },
+];
 
 export interface KpisDeContas {
   totalAberto: number;

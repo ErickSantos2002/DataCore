@@ -8,7 +8,10 @@ import {
   deTextos,
 } from "../../design-system/ui";
 import { PRESETS_DE_PERIODO } from "../../lib/periodo";
-import type { FiltrosDeContas as ValoresDosFiltros } from "./contas";
+import {
+  PRAZOS_DE_CONTAS,
+  type FiltrosDeContas as ValoresDosFiltros,
+} from "./contas";
 
 export interface FiltrosDeContasProps {
   /** "Cliente" em Contas a Receber, "Fornecedor" em Contas a Pagar. */
@@ -23,14 +26,15 @@ export interface FiltrosDeContasProps {
   onSituacao: (selecionadas: string[]) => void;
   onCategoria: (selecionadas: string[]) => void;
   onContraparte: (selecionadas: string[]) => void;
+  onPrazo: (prazo: string) => void;
   onPreset: (preset: string) => void;
   onDataInicio: (data: string) => void;
   onDataFim: (data: string) => void;
 }
 
 /**
- * A barra de filtros das duas telas: três multi-seleções, o período rápido e
- * as duas datas.
+ * A barra de filtros das duas telas: três multi-seleções, o prazo (vencidas
+ * ou a vencer), o período rápido e as duas datas.
  *
  * O título "Filtros" mora dentro da barra, ocupando a linha inteira, porque é
  * ele que diz que os rótulos "Situação" e "Categoria" daqui são filtro e não
@@ -44,6 +48,7 @@ export function FiltrosDeContas({
   onSituacao,
   onCategoria,
   onContraparte,
+  onPrazo,
   onPreset,
   onDataInicio,
   onDataFim,
@@ -61,7 +66,7 @@ export function FiltrosDeContas({
         </h2>
       </div>
 
-      <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-6">
+      <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <MultiSelect
           rotulo="Situação"
           opcoes={deTextos(opcoes.situacao)}
@@ -84,6 +89,13 @@ export function FiltrosDeContas({
           selecionados={valores.contraparte}
           onChange={onContraparte}
           placeholder="Todos"
+        />
+
+        <Select
+          label="Vencimento"
+          options={PRAZOS_DE_CONTAS}
+          value={valores.prazo}
+          onChange={(evento) => onPrazo(evento.target.value)}
         />
 
         <Select

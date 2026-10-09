@@ -86,6 +86,11 @@ def resumo_contas_receber(
     contraparte: Optional[List[str]] = Query(None, description="Clientes (repetível)"),
     data_inicio: Optional[date] = Query(None, description="Emissão a partir de (inclusive)"),
     data_fim: Optional[date] = Query(None, description="Emissão até (inclusive)"),
+    prazo: Optional[str] = Query(
+        None,
+        pattern="^(vencidas|a_vencer)$",
+        description="`vencidas` (venceu e não foi quitada nem cancelada) ou `a_vencer`",
+    ),
     db: Session = Depends(get_db),
 ):
     """KPIs, evolução, categorias e ranking de cliente — do recorte inteiro.
@@ -112,6 +117,7 @@ def resumo_contas_receber(
         data_inicio=data_inicio,
         data_fim=data_fim,
         hoje=date.today(),
+        prazo=prazo,
     )
 
 
@@ -122,6 +128,11 @@ def pagina_contas_receber(
     contraparte: Optional[List[str]] = Query(None),
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
+    prazo: Optional[str] = Query(
+        None,
+        pattern="^(vencidas|a_vencer)$",
+        description="`vencidas` (venceu e não foi quitada nem cancelada) ou `a_vencer`",
+    ),
     busca: Optional[str] = Query(
         None, max_length=120, description="Procura em cliente, categoria, documento e histórico"
     ),
@@ -168,5 +179,6 @@ def pagina_contas_receber(
         limite=limite,
         offset=offset,
         hoje=date.today(),
+        prazo=prazo,
         colunas_extras=["forma_pagamento", "portador", "ocorrencia"],
     )

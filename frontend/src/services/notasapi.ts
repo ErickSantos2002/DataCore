@@ -637,6 +637,7 @@ export interface FiltrosDeContasAPI extends Params {
   contraparte?: string[];
   data_inicio?: string;
   data_fim?: string;
+  prazo?: string;
 }
 
 export interface ResumoDeContas {

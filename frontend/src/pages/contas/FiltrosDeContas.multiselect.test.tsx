@@ -34,6 +34,7 @@ const VALORES_VAZIOS = {
   contraparte: [],
   dataInicio: "",
   dataFim: "",
+  prazo: "",
 };
 
 function montar(
@@ -47,6 +48,7 @@ function montar(
     onSituacao: vi.fn(),
     onCategoria: vi.fn(),
     onContraparte: vi.fn(),
+    onPrazo: vi.fn(),
     onPreset: vi.fn(),
     onDataInicio: vi.fn(),
     onDataFim: vi.fn(),
