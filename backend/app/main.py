@@ -92,6 +92,7 @@ app.include_router(endpoints.configuracoes, dependencies=PROTEGIDO)
 app.include_router(endpoints.estoque, dependencies=PROTEGIDO)
 app.include_router(endpoints.contas_pagar, dependencies=PROTEGIDO)
 app.include_router(endpoints.contas_receber, dependencies=PROTEGIDO)
+app.include_router(endpoints.inadimplencia, dependencies=PROTEGIDO)
 app.include_router(endpoints.centro_custo, dependencies=PROTEGIDO)
 # saúde da ingestão: o DataCoreHS mostra aqui quando uma carga deu errado
 app.include_router(endpoints.operacao, dependencies=PROTEGIDO)
