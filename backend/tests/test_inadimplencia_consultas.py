@@ -431,3 +431,134 @@ def test_recuperado_nao_segue_o_filtro(db, contas):
     assert _resumo(db, **filtro).total_vencido == 10
     assert _resumo(db, **filtro).recuperado == pytest.approx(0.75)
     assert _resumo(db, **filtro).recuperado == _resumo(db).recuperado
+
+
+# ─────────────────────────────────────────────── filtros da aba Indicadores
+
+FIXO = date(2026, 10, 9)
+
+
+def _ind(db, **kw):
+    from app.core.inadimplencia import indicadores
+
+    return indicadores(db, FIXO, **kw)
+
+
+def test_periodo_recorta_a_serie_e_o_total(db, contas):
+    contas(hoje=FIXO, venceu_ha=131, valor=100)                      # 31/05/2026
+    contas(hoje=FIXO, venceu_ha=100, valor=200, pago_dias_depois=5)  # 01/07/2026
+    contas(hoje=FIXO, venceu_ha=70, valor=400)                       # 31/07/2026
+    contas(hoje=FIXO, venceu_ha=69, valor=800)                       # 01/08/2026
+    i = _ind(db, mes_inicio="2026-06", mes_fim="2026-07")
+    assert [m.mes for m in i.mensal] == ["2026-07"]
+    assert i.total.valor == 600 and i.total.inadimplente == 400
+    assert [a.ano for a in i.anual] == [2026] and i.anual[0].valor == 600
+    assert i.ultimo_fechado.mes == "2026-07"
+    assert i.media_12_meses == pytest.approx(400 / 600)
+    assert i.desde == date(2026, 7, 1)
+
+
+def test_periodo_sem_teto_de_meses_na_serie(db, contas):
+    from app.core.inadimplencia import MESES_NA_SERIE
+
+    contas(hoje=FIXO, venceu_ha=365 * 3, valor=100)    # três anos atrás: fora da série padrão
+    contas(hoje=FIXO, venceu_ha=40, valor=100)
+    assert len(_ind(db).mensal) == 1
+    i = _ind(db, mes_inicio="2023-01", mes_fim="2026-10")
+    assert len(i.mensal) == 2
+    assert MESES_NA_SERIE == 24
+
+
+def test_so_inicio_ou_so_fim_do_periodo(db, contas):
+    contas(hoje=FIXO, venceu_ha=100, valor=100)     # jul
+    contas(hoje=FIXO, venceu_ha=40, valor=200)      # ago
+    assert _ind(db, mes_inicio="2026-08").total.valor == 200
+    assert _ind(db, mes_fim="2026-07").total.valor == 100
+
+
+def test_categoria_inclusive_sem_categoria(db, contas):
+    contas(hoje=FIXO, venceu_ha=40, valor=100, categoria="Locação")
+    contas(hoje=FIXO, venceu_ha=40, valor=200, categoria="Venda")
+    contas(hoje=FIXO, venceu_ha=40, valor=400, categoria=None)
+    contas(hoje=FIXO, venceu_ha=40, valor=800, categoria="")
+    assert _ind(db, categoria=["Locação"]).total.valor == 100
+    assert _ind(db, categoria=["Locação", "Venda"]).total.valor == 300
+    assert _ind(db, categoria=["__sem__"]).total.valor == 1200
+    assert _ind(db, categoria=["Venda", "__sem__"]).total.valor == 1400
+    assert _ind(db, categoria=[]).total.valor == 1500
+
+
+def test_forma_de_pagamento_e_uf(db, contas):
+    contas(hoje=FIXO, venceu_ha=40, valor=100, forma_pagamento="Boleto", uf="PE")
+    contas(hoje=FIXO, venceu_ha=40, valor=200, forma_pagamento="Pix", uf="SP")
+    contas(hoje=FIXO, venceu_ha=40, valor=400)
+    assert _ind(db, forma_pagamento=["Pix"]).total.valor == 200
+    assert _ind(db, forma_pagamento=["__sem__"]).total.valor == 400
+    assert _ind(db, uf=["PE"]).total.valor == 100
+    assert _ind(db, uf=["SP", "__sem__"]).total.valor == 600
+    assert _ind(db, uf=["PE"], forma_pagamento=["Pix"]).total.valor == 0
+
+
+def test_cliente_por_nome_sem_curinga(db, contas):
+    contas(hoje=FIXO, nome="Alfa 100% Ltda", doc="11111111000111", venceu_ha=40, valor=100)
+    contas(hoje=FIXO, nome="Alfa 1000 Ltda", doc="22222222000122", venceu_ha=40, valor=200)
+    contas(hoje=FIXO, nome="Beta_Sul", doc="33333333000133", venceu_ha=40, valor=400)
+    contas(hoje=FIXO, nome="BetaXSul", doc="44444444000144", venceu_ha=40, valor=800)
+    assert _ind(db, cliente="alfa").total.valor == 300
+    assert _ind(db, cliente="100%").total.valor == 100        # o % é literal
+    assert _ind(db, cliente="beta_").total.valor == 400       # o _ também
+    assert _ind(db, cliente="  ").total.valor == 1500         # vazio = sem filtro
+
+
+def test_cliente_pela_raiz_do_cnpj_pega_as_filiais(db, contas):
+    contas(hoje=FIXO, nome="Alfa - Cidade A", doc="11.111.111/0001-11", venceu_ha=40, valor=100)
+    contas(hoje=FIXO, nome="Alfa - Cidade B", doc="11.111.111/0002-02", venceu_ha=40, valor=200)
+    contas(hoje=FIXO, nome="Gama", doc="22.111.111/0001-22", venceu_ha=40, valor=400)
+    assert _ind(db, cliente="11.111.111").total.valor == 300
+    assert _ind(db, cliente="11111111000202").total.valor == 200
+    # menos de 8 dígitos não vira busca por documento (nem casa nome)
+    assert _ind(db, cliente="1111").total.valor == 0
+
+
+def test_opcoes_ignoram_o_filtro_e_os_vazios(db, contas):
+    contas(hoje=FIXO, venceu_ha=40, categoria="Venda", forma_pagamento="Pix", uf="SP")
+    contas(hoje=FIXO, venceu_ha=40, categoria="Locação", forma_pagamento="Boleto", uf="PE")
+    contas(hoje=FIXO, venceu_ha=40, categoria="", forma_pagamento=None, uf="")
+    contas(hoje=FIXO, venceu_ha=40, categoria="Cancelada", situacao="cancelada")
+    contas(hoje=FIXO, venceu_ha=40, categoria="Excluida", excluida=True)
+    o = _ind(db, categoria=["Venda"]).opcoes
+    assert o.categorias == ["Locação", "Venda"]
+    assert o.formas_pagamento == ["Boleto", "Pix"]
+    assert o.ufs == ["PE", "SP"]
+
+
+def test_vazio_no_recorte(db, contas):
+    contas(hoje=FIXO, venceu_ha=40, categoria="Venda")
+    i = _ind(db, categoria=["Outra"])
+    assert i.mensal == [] and i.anual == [] and i.total.valor == 0
+    assert i.ultimo_fechado is None and i.media_12_meses is None and i.desde is None
+
+
+def test_params_base_deixa_os_filtros_de_titulo_nulos():
+    from app.core.inadimplencia import params_base
+
+    p = params_base(FIXO)
+    for k in ("tit_categorias", "tit_formas", "tit_ufs", "tit_nome", "tit_doc"):
+        assert p[k] is None
+
+
+@pytest.mark.parametrize("ini,fim", [("2026-13", None), ("2026-1", None), (None, "ontem"),
+                                     ("2026-08", "2026-07")])
+def test_intervalo_dos_meses_invalido(ini, fim):
+    from app.core.inadimplencia import intervalo_dos_meses
+
+    with pytest.raises(ValueError):
+        intervalo_dos_meses(ini, fim)
+
+
+def test_intervalo_dos_meses():
+    from app.core.inadimplencia import intervalo_dos_meses
+
+    assert intervalo_dos_meses("2024-02", "2024-02") == (date(2024, 2, 1), date(2024, 2, 29))
+    assert intervalo_dos_meses(None, "2026-12") == (None, date(2026, 12, 31))
+    assert intervalo_dos_meses(None, None) == (None, None)

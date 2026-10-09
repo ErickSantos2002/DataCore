@@ -105,8 +105,21 @@ def titulos(empresa: str, db: Session = Depends(get_db), _u: Usuario = Depends(F
 
 
 @router.get("/indicadores", response_model=consultas.Indicadores)
-def indicadores(db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
-    return consultas.indicadores(db, hoje_na_empresa())
+def indicadores(
+    mes_inicio: Optional[str] = Query(None, description="AAAA-MM: vencimento a partir do 1º dia deste mês."),
+    mes_fim: Optional[str] = Query(None, description="AAAA-MM: vencimento até o último dia deste mês."),
+    categoria: Optional[List[str]] = Query(None, description="`__sem__` = sem categoria."),
+    forma_pagamento: Optional[List[str]] = Query(None, description="`__sem__` = sem forma de pagamento."),
+    uf: Optional[List[str]] = Query(None, description="UF do cliente; `__sem__` = sem UF."),
+    cliente: Optional[str] = Query(None, max_length=120, description="Nome, ou 8+ dígitos do documento."),
+    db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO),
+):
+    try:
+        consultas.intervalo_dos_meses(mes_inicio, mes_fim)
+    except ValueError as erro:
+        raise HTTPException(422, str(erro))
+    return consultas.indicadores(db, hoje_na_empresa(), mes_inicio=mes_inicio, mes_fim=mes_fim,
+                                 categoria=categoria, forma_pagamento=forma_pagamento, uf=uf, cliente=cliente)
 
 
 class TextoDaObservacao(BaseModel):

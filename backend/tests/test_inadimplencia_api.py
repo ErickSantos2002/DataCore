@@ -164,3 +164,36 @@ def test_resumo_valida_status_e_faixa(client, financeiro):
     assert client.get("/inadimplencia/resumo", params={"faixa": "x"}, headers=financeiro.headers).status_code == 422
     assert client.get("/inadimplencia/resumo", params={"status": "inventado"},
                       headers=financeiro.headers).status_code == 422
+
+
+def test_indicadores_recebe_os_filtros(client, financeiro, contas):
+    contas(nome="Alfa", doc="11111111000111", venceu_ha=40, valor=100, categoria="Venda", uf="PE")
+    contas(nome="Beta", doc="22222222000122", venceu_ha=40, valor=200, categoria=None, uf="SP")
+    r = client.get("/inadimplencia/indicadores", headers=financeiro.headers,
+                   params=[("categoria", "Venda"), ("categoria", "__sem__"), ("uf", "SP")]).json()
+    assert r["total"]["valor"] == 200
+    assert r["opcoes"] == {"categorias": ["Venda"], "formas_pagamento": [], "ufs": ["PE", "SP"]}
+    r = client.get("/inadimplencia/indicadores", headers=financeiro.headers,
+                   params={"cliente": "alfa", "forma_pagamento": "__sem__"}).json()
+    assert r["total"]["valor"] == 100
+
+
+def test_indicadores_recebe_o_periodo(client, financeiro, contas):
+    from datetime import date, timedelta
+
+    contas(venceu_ha=40, valor=100)
+    mes = (date.today() - timedelta(days=40)).strftime("%Y-%m")
+    r = client.get("/inadimplencia/indicadores", headers=financeiro.headers,
+                   params={"mes_inicio": mes, "mes_fim": mes}).json()
+    assert r["total"]["valor"] == 100
+    r = client.get("/inadimplencia/indicadores", headers=financeiro.headers,
+                   params={"mes_inicio": "2000-01", "mes_fim": "2000-02"}).json()
+    assert r["total"]["valor"] == 0
+
+
+@pytest.mark.parametrize("params", [{"mes_inicio": "2026-13"}, {"mes_fim": "10/2026"},
+                                    {"mes_inicio": "2026-08", "mes_fim": "2026-07"}])
+def test_indicadores_periodo_invalido_422(client, financeiro, params):
+    r = client.get("/inadimplencia/indicadores", params=params, headers=financeiro.headers)
+    assert r.status_code == 422
+    assert isinstance(r.json()["detail"], str)

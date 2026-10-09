@@ -55,7 +55,8 @@ def contas(tabela_contas):
 
     def _inserir(*, nome="Alfa Ltda", doc="11.111.111/0001-11", venceu_ha=40,
                  valor=1000, saldo=None, situacao="aberto", pago_dias_depois=None,
-                 emissao_ha=None, excluida=False, hoje=None):
+                 emissao_ha=None, excluida=False, hoje=None, categoria=None,
+                 forma_pagamento=None, uf=None):
         hoje = hoje or date.today()
         vencimento = hoje - timedelta(days=venceu_ha)
         liquidacao = None
@@ -69,11 +70,12 @@ def contas(tabela_contas):
             conn.execute(text(
                 "INSERT INTO tiny.contas_receber (id_tiny, data, vencimento, valor, saldo, situacao,"
                 " liquidacao, cliente_nome, cliente_cpf_cnpj, cliente_fone, cliente_email,"
-                " excluida_na_origem_em)"
+                " excluida_na_origem_em, categoria, forma_pagamento, cliente_uf)"
                 " VALUES (:i, :e, :v, :valor, :saldo, :s, :l, :n, :d, '(11) 0000-0000',"
-                " 'financeiro@exemplo.com', :x)"
+                " 'financeiro@exemplo.com', :x, :cat, :forma, :uf)"
             ), {"i": 100000 + i, "e": vencimento - timedelta(days=emissao_ha or 10),
                 "v": vencimento, "valor": valor, "saldo": saldo, "s": situacao,
                 "l": liquidacao, "n": nome, "d": doc,
-                "x": date.today() if excluida else None})
+                "x": date.today() if excluida else None,
+                "cat": categoria, "forma": forma_pagamento, "uf": uf})
     return _inserir

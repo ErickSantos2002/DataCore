@@ -5,8 +5,10 @@ Spec: docs/superpowers/specs/2026-10-09-inadimplencia-design.md
 As definições — empresa, faixas, carência e taxa de safra — moram aqui e em nenhum
 outro lugar. A tela recebe tudo somado, como em `contas_agregado.py` (item 9.4).
 """
+import re
+from calendar import monthrange
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
@@ -59,7 +61,52 @@ def params_base(hoje: date) -> dict:
         "carencia": CARENCIA_DIAS,
         # sem recorte de títulos: tudo nulo
         "tit_campo": "vencimento", "tit_ini": None, "tit_fim": None,
+        "tit_categorias": None, "tit_formas": None, "tit_ufs": None, "tit_nome": None, "tit_doc": None,
     }
+
+
+#: O valor da lista de categoria/forma/UF que quer dizer "nulo ou vazio" ("Sem categoria" na tela).
+SEM_VALOR = "__sem__"
+#: A partir de quantos dígitos o texto do cliente também procura no documento (a raiz do CNPJ tem 8).
+DIGITOS_PARA_DOCUMENTO = 8
+_MES = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+
+
+def intervalo_dos_meses(mes_inicio: Optional[str], mes_fim: Optional[str]) -> Tuple[Optional[date], Optional[date]]:
+    """`AAAA-MM` → (1º dia do mês inicial, último dia do mês final). `ValueError` com a frase do 422."""
+    def ler(mes: Optional[str], nome: str):
+        if mes is None or mes == "":
+            return None
+        m = _MES.match(mes)
+        if not m:
+            raise ValueError(f"`{nome}` deve estar no formato AAAA-MM.")
+        return int(m.group(1)), int(m.group(2))
+
+    ini, fim = ler(mes_inicio, "mes_inicio"), ler(mes_fim, "mes_fim")
+    if ini and fim and fim < ini:
+        raise ValueError("O mês final não pode ser anterior ao inicial.")
+    de = date(ini[0], ini[1], 1) if ini else None
+    ate = date(fim[0], fim[1], monthrange(fim[0], fim[1])[1]) if fim else None
+    return de, ate
+
+
+def _padrao_do_nome(texto: str) -> str:
+    """O texto do cliente como pedaço de LIKE: `%`, `_` e a barra viram literais (a barra é o escape padrão)."""
+    return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def params_de_titulos(hoje: date, *, mes_inicio: Optional[str] = None, mes_fim: Optional[str] = None,
+                      categoria: Optional[List[str]] = None, forma_pagamento: Optional[List[str]] = None,
+                      uf: Optional[List[str]] = None, cliente: Optional[str] = None) -> dict:
+    """Os filtros da aba Indicadores: todos recortam TÍTULOS, na CTE `titulos`. Lista vazia = sem filtro."""
+    de, ate = intervalo_dos_meses(mes_inicio, mes_fim)
+    texto = (cliente or "").strip()
+    digitos = re.sub(r"[^0-9]", "", texto)
+    return {**params_base(hoje),
+            "tit_campo": "vencimento", "tit_ini": de, "tit_fim": ate,
+            "tit_categorias": categoria or None, "tit_formas": forma_pagamento or None, "tit_ufs": uf or None,
+            "tit_nome": _padrao_do_nome(texto) if texto else None,
+            "tit_doc": digitos if len(digitos) >= DIGITOS_PARA_DOCUMENTO else None}
 
 
 def params_do_recorte(hoje: date, *, status: Optional[List[str]] = None, faixa: Optional[str] = None,
@@ -104,6 +151,19 @@ WITH titulos AS (
       AND (CAST(:tit_fim AS date) IS NULL
            OR CASE WHEN CAST(:tit_campo AS text) = 'emissao' THEN data ELSE vencimento END
               <= CAST(:tit_fim AS date))
+      -- recortes da aba Indicadores; `__sem__` é nulo ou vazio (ver `SEM_VALOR`)
+      AND (CAST(:tit_categorias AS text[]) IS NULL
+           OR COALESCE(NULLIF(trim(categoria), ''), '__sem__') = ANY(CAST(:tit_categorias AS text[])))
+      AND (CAST(:tit_formas AS text[]) IS NULL
+           OR COALESCE(NULLIF(trim(forma_pagamento), ''), '__sem__') = ANY(CAST(:tit_formas AS text[])))
+      AND (CAST(:tit_ufs AS text[]) IS NULL
+           OR COALESCE(NULLIF(trim(cliente_uf), ''), '__sem__') = ANY(CAST(:tit_ufs AS text[])))
+      -- cliente: nome contém o texto (já escapado), ou documento começa pelos dígitos (raiz pega as filiais)
+      AND (CAST(:tit_nome AS text) IS NULL
+           OR cliente_nome ILIKE '%' || CAST(:tit_nome AS text) || '%'
+           OR (CAST(:tit_doc AS text) IS NOT NULL
+               AND regexp_replace(COALESCE(cliente_cpf_cnpj, ''), '[^0-9]', '', 'g')
+                   LIKE CAST(:tit_doc AS text) || '%'))
 ),
 t AS (
     SELECT *,
@@ -538,6 +598,12 @@ class AnoDeTaxa(PontoDeTaxa):
     ano_corrente: bool
 
 
+class OpcoesDosFiltros(BaseModel):
+    categorias: List[str]
+    formas_pagamento: List[str]
+    ufs: List[str]
+
+
 class Indicadores(BaseModel):
     mensal: List[MesDeTaxa]
     anual: List[AnoDeTaxa]
@@ -545,6 +611,19 @@ class Indicadores(BaseModel):
     desde: Optional[date]
     ultimo_fechado: Optional[MesDeTaxa]
     media_12_meses: Optional[float]
+    opcoes: OpcoesDosFiltros
+
+
+# As opções dos selects saem da base inteira, SEM os filtros: escolher uma categoria não pode
+# sumir com as outras do select. Nulo e vazio ficam de fora — a tela acrescenta "Sem …" (`__sem__`).
+SQL_OPCOES = """
+SELECT array_agg(DISTINCT trim(categoria)) FILTER (WHERE trim(categoria) <> '')             AS categorias,
+       array_agg(DISTINCT trim(forma_pagamento)) FILTER (WHERE trim(forma_pagamento) <> '') AS formas_pagamento,
+       array_agg(DISTINCT trim(cliente_uf)) FILTER (WHERE trim(cliente_uf) <> '')           AS ufs
+FROM tiny.contas_receber
+WHERE excluida_na_origem_em IS NULL
+  AND lower(COALESCE(situacao, '')) <> ALL(CAST(:canceladas AS text[]))
+"""
 
 
 SQL_MADUROS = """
@@ -569,14 +648,27 @@ def _taxa(l) -> dict:
             "taxa": (inad / valor) if valor else None}
 
 
-def indicadores(db: Session, hoje: date) -> Indicadores:
-    p = params_base(hoje)
-    primeiro = date(hoje.year, hoje.month, 1)
-    ano, mes = primeiro.year, primeiro.month - (MESES_NA_SERIE - 1)
-    while mes <= 0:
-        mes += 12
-        ano -= 1
-    p["inicio_serie"] = date(ano, mes, 1)
+def opcoes_dos_filtros(db: Session) -> OpcoesDosFiltros:
+    l = db.execute(text(SQL_OPCOES), {"canceladas": SITUACOES_CANCELADAS}).mappings().one()
+    return OpcoesDosFiltros(**{k: sorted(v or []) for k, v in l.items()})
+
+
+def indicadores(db: Session, hoje: date, *, mes_inicio: Optional[str] = None, mes_fim: Optional[str] = None,
+                categoria: Optional[List[str]] = None, forma_pagamento: Optional[List[str]] = None,
+                uf: Optional[List[str]] = None, cliente: Optional[str] = None) -> Indicadores:
+    """A taxa de safra no recorte de títulos pedido. Sem período, a série mensal são os últimos
+    `MESES_NA_SERIE` meses; com período, são os meses dele, sem teto (o recorte já está nos títulos)."""
+    p = params_de_titulos(hoje, mes_inicio=mes_inicio, mes_fim=mes_fim, categoria=categoria,
+                          forma_pagamento=forma_pagamento, uf=uf, cliente=cliente)
+    if p["tit_ini"] is not None or p["tit_fim"] is not None:
+        p["inicio_serie"] = None
+    else:
+        primeiro = date(hoje.year, hoje.month, 1)
+        ano, mes = primeiro.year, primeiro.month - (MESES_NA_SERIE - 1)
+        while mes <= 0:
+            mes += 12
+            ano -= 1
+        p["inicio_serie"] = date(ano, mes, 1)
     p["ano_inicial"] = ANO_INICIAL
 
     mensal = []
@@ -585,7 +677,8 @@ def indicadores(db: Session, hoje: date) -> Indicadores:
                (date_trunc('month', vencimento) + interval '1 month' - interval '1 day'
                 + CAST(:carencia AS int) * interval '1 day') >= CAST(:hoje AS date) AS em_apuracao,
                {_SOMAS}
-        FROM maduros WHERE vencimento >= CAST(:inicio_serie AS date)
+        FROM maduros
+        WHERE CAST(:inicio_serie AS date) IS NULL OR vencimento >= CAST(:inicio_serie AS date)
         GROUP BY 1, 2 ORDER BY 1
     """), p).mappings():
         mensal.append(MesDeTaxa(mes=l["mes"], em_apuracao=l["em_apuracao"], **_taxa(l)))
@@ -607,4 +700,5 @@ def indicadores(db: Session, hoje: date) -> Indicadores:
         mensal=mensal, anual=anual, total=PontoDeTaxa(**_taxa(tot)), desde=tot["desde"],
         ultimo_fechado=fechados[-1] if fechados else None,
         media_12_meses=(sum(m.inadimplente for m in ultimos) / soma_v) if soma_v else None,
+        opcoes=opcoes_dos_filtros(db),
     )
