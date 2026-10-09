@@ -48,6 +48,7 @@ from datetime import date, timedelta
 
 from app.core.config import settings
 from app.models.database import SessionLocal
+from app.services.cobranca import sincronizar as sincronizar_cobranca
 from app.services.execucao import registrar_execucao
 from app.services.tiny_api import (ESPERA_PADRAO, TinyAPI, TinyAPIError,
                                    TinyNaoLocalizado, TinySemRegistros)
@@ -204,6 +205,20 @@ def _carregar(args, registro) -> int:
                 logger.info("   %-20s %d", acao, quantas)
             if erros:
                 logger.warning("   %-20s %d", "erros", erros)
+        # A cobrança se acerta depois de cada carga de contas a receber: abre ciclo para
+        # quem passou de 30 dias, fecha quem pagou, quebra promessa vencida. Falha aqui
+        # NÃO derruba a carga — ela alimenta o sistema inteiro; a cobrança se acerta na
+        # próxima, e o motivo fica no detalhe da execução (tela de Importações).
+        if "receber" in tipos and not args.dry_run:
+            try:
+                mudancas = sincronizar_cobranca(db, date.today())
+                db.commit()
+                for acao, quantas in mudancas.items():
+                    tudo[f"cobrança: {acao}"] = quantas
+            except Exception as erro:  # noqa: BLE001
+                db.rollback()
+                logger.exception("sincronização da cobrança falhou")
+                registro.detalhe = f"Sincronização da cobrança falhou: {erro}"
     finally:
         db.close()
     registro.contagens = tudo
