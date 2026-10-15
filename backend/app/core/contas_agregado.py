@@ -113,8 +113,10 @@ class ResumoDeContas(BaseModel):
     opcoes: OpcoesDeContas
 
 
-def _clausulas(campo_emissao: str) -> str:
+def _clausulas(campo_periodo: str) -> str:
     """Os seis filtros da tela, na mesma ordem em que ela os aplica.
+
+    `campo_periodo` é a data que o filtro de período recorta — ver `_base`.
 
     `CAST()` e nunca o operador de cast com dois-pontos: em `text()` do
     SQLAlchemy os dois-pontos iniciam um bind param, e o cast viraria um
@@ -136,9 +138,9 @@ def _clausulas(campo_emissao: str) -> str:
       AND (CAST(:contrapartes AS text[]) IS NULL
            OR trim(cliente_nome) = ANY(CAST(:contrapartes AS text[])))
       AND (CAST(:data_inicio AS date) IS NULL
-           OR {campo_emissao} >= CAST(:data_inicio AS date))
+           OR {campo_periodo} >= CAST(:data_inicio AS date))
       AND (CAST(:data_fim AS date) IS NULL
-           OR {campo_emissao} <= CAST(:data_fim AS date))
+           OR {campo_periodo} <= CAST(:data_fim AS date))
       AND (CAST(:prazo AS text) IS NULL
            OR (lower(COALESCE(situacao, '')) <> ALL(CAST(:nao_vencem AS text[]))
                AND CASE CAST(:prazo AS text)
@@ -148,16 +150,24 @@ def _clausulas(campo_emissao: str) -> str:
     """
 
 
-def _base(tabela: str, campo_emissao: str) -> str:
+def _base(tabela: str, campo_emissao: str, campo_periodo: Optional[str] = None) -> str:
     """As contas do recorte, já com `quitado` e `aberto` calculados.
+
+    `campo_periodo` é a data que decide o filtro de período, a evolução por mês
+    e ano e o divisor da média mensal. Sem ele, é a emissão. Contas a Pagar usa o
+    vencimento (decisão do Erick em 15/10/2026): o contas a pagar foi lançado de
+    uma vez em outubro/2026 com as parcelas até 2031, e pela emissão os R$ 2,17
+    mi em aberto caíam todos numa barra só de outubro.
 
     Duas CTEs porque `quitada` não pode ser referenciada no mesmo `SELECT` que a
     define — repetir a expressão convidaria as duas cópias a divergirem.
     """
+    campo_periodo = campo_periodo or campo_emissao
     return f"""
 WITH filtradas AS (
     SELECT id,
            {campo_emissao} AS emissao,
+           {campo_periodo} AS periodo,
            vencimento,
            situacao,
            categoria,
@@ -172,7 +182,7 @@ WITH filtradas AS (
            lower(COALESCE(situacao, '')) = ANY(CAST(:quitadas AS text[])) AS quitada,
            lower(COALESCE(situacao, '')) = ANY(CAST(:canceladas AS text[])) AS cancelada
     FROM tiny.{tabela}
-    {_clausulas(campo_emissao)}
+    {_clausulas(campo_periodo)}
 ),
 contas AS (
     SELECT *,
@@ -197,14 +207,14 @@ SELECT COALESCE(SUM(quitado), 0) AS total_quitado,
              AND NOT quitada
              AND NOT cancelada
        )                         AS a_vencer_30,
-       -- O divisor é o número de meses DISTINTOS de emissão, como sempre foi:
-       -- a média mensal faturada, coerente com o divisor ser mês de emissão.
-       COUNT(DISTINCT to_char(emissao, 'YYYY-MM')) AS meses
+       -- O divisor é o número de meses DISTINTOS do período (emissão, ou o
+       -- vencimento em Contas a Pagar): a mesma data que monta o gráfico.
+       COUNT(DISTINCT to_char(periodo, 'YYYY-MM')) AS meses
 FROM contas
 """
 
 SQL_POR_ANO = """
-SELECT EXTRACT(YEAR FROM emissao)::int AS ano,
+SELECT EXTRACT(YEAR FROM periodo)::int AS ano,
        COALESCE(SUM(quitado), 0)       AS quitado,
        COALESCE(SUM(aberto), 0)        AS aberto
 FROM contas
@@ -213,8 +223,8 @@ ORDER BY 1
 """
 
 SQL_POR_MES = """
-SELECT EXTRACT(YEAR  FROM emissao)::int AS ano,
-       EXTRACT(MONTH FROM emissao)::int AS mes,
+SELECT EXTRACT(YEAR  FROM periodo)::int AS ano,
+       EXTRACT(MONTH FROM periodo)::int AS mes,
        COALESCE(SUM(quitado), 0)        AS quitado,
        COALESCE(SUM(aberto), 0)         AS aberto
 FROM contas
@@ -270,9 +280,10 @@ def resumo_de_contas(
     data_fim: Optional[date],
     hoje: date,
     prazo: Optional[str] = None,
+    campo_periodo: Optional[str] = None,
 ) -> ResumoDeContas:
     """Os quatro recortes que a tela desenha, para um mesmo filtro."""
-    base = _base(tabela, campo_emissao)
+    base = _base(tabela, campo_emissao, campo_periodo)
     params = {
         "quitadas": quitadas,
         "nao_vencem": SITUACOES_QUE_NAO_VENCEM,
@@ -479,6 +490,7 @@ def pagina_de_contas(
     hoje: date,
     colunas_extras: Optional[List[str]] = None,
     prazo: Optional[str] = None,
+    campo_periodo: Optional[str] = None,
 ) -> PaginaDeContas:
     """Uma página da tabela, filtrada, buscada e ordenada pelo banco.
 
@@ -486,7 +498,7 @@ def pagina_de_contas(
     planilha. Vêm do código da rota, nunca do pedido: entram concatenadas no
     `SELECT`, que é onde bind param não alcança.
     """
-    base = _base(tabela, campo_emissao)
+    base = _base(tabela, campo_emissao, campo_periodo)
     params = {
         "quitadas": quitadas,
         "situacoes": situacoes or None,

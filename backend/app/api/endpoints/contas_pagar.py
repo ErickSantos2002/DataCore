@@ -20,6 +20,11 @@ from app.models.database import SessionLocal
 
 router = APIRouter(prefix="/contas_pagar", tags=["Contas a Pagar"])
 
+# A data que o período da tela recorta e o gráfico agrupa (`/resumo` e `/pagina`).
+# Vencimento, e não emissão: conta a pagar se planeja pelo dia em que vence — e
+# o lançamento de outubro/2026 com as parcelas até 2031 caía inteiro num mês só.
+CAMPO_DO_PERIODO = "vencimento"
+
 
 def get_db():
     db = SessionLocal()
@@ -84,8 +89,8 @@ def resumo_contas_pagar(
     situacao: Optional[List[str]] = Query(None, description="Situações (repetível)"),
     categoria: Optional[List[str]] = Query(None, description="Categorias (repetível)"),
     contraparte: Optional[List[str]] = Query(None, description="Fornecedors (repetível)"),
-    data_inicio: Optional[date] = Query(None, description="Emissão a partir de (inclusive)"),
-    data_fim: Optional[date] = Query(None, description="Emissão até (inclusive)"),
+    data_inicio: Optional[date] = Query(None, description="Vencimento a partir de (inclusive)"),
+    data_fim: Optional[date] = Query(None, description="Vencimento até (inclusive)"),
     prazo: Optional[str] = Query(
         None,
         pattern="^(vencidas|a_vencer)$",
@@ -110,6 +115,7 @@ def resumo_contas_pagar(
         db,
         tabela="contas_pagar",
         campo_emissao="data_emissao",
+        campo_periodo=CAMPO_DO_PERIODO,
         quitadas=QUITADAS_A_PAGAR,
         situacoes=situacao,
         categorias=categoria,
@@ -167,6 +173,7 @@ def pagina_contas_pagar(
         db,
         tabela="contas_pagar",
         campo_emissao="data_emissao",
+        campo_periodo=CAMPO_DO_PERIODO,
         quitadas=QUITADAS_A_PAGAR,
         situacoes=situacao,
         categorias=categoria,
