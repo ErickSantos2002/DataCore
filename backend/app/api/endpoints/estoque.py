@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -27,7 +28,7 @@ def obter_estoque(estoque_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Estoque não encontrado")
     return estoque
 
-@router.post("/", response_model=schemas.Estoque)
+@router.post("/", dependencies=[Depends(acesso.ADMIN)], response_model=schemas.Estoque)
 def criar_estoque(item: schemas.EstoqueCreate, db: Session = Depends(get_db)):
     db_item = models.Estoque(**item.dict())
     db.add(db_item)
@@ -35,7 +36,7 @@ def criar_estoque(item: schemas.EstoqueCreate, db: Session = Depends(get_db)):
     db.refresh(db_item)
     return db_item
 
-@router.put("/{estoque_id}", response_model=schemas.Estoque)
+@router.put("/{estoque_id}", dependencies=[Depends(acesso.ADMIN)], response_model=schemas.Estoque)
 def atualizar_estoque(estoque_id: int, item: schemas.EstoqueUpdate, db: Session = Depends(get_db)):
     db_item = db.query(models.Estoque).filter(models.Estoque.id == estoque_id).first()
     if not db_item:
@@ -46,7 +47,7 @@ def atualizar_estoque(estoque_id: int, item: schemas.EstoqueUpdate, db: Session 
     db.refresh(db_item)
     return db_item
 
-@router.delete("/{estoque_id}")
+@router.delete("/{estoque_id}", dependencies=[Depends(acesso.ADMIN)])
 def deletar_estoque(estoque_id: int, db: Session = Depends(get_db)):
     db_item = db.query(models.Estoque).filter(models.Estoque.id == estoque_id).first()
     if not db_item:

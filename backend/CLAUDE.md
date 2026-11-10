@@ -111,8 +111,9 @@ Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por ba
 - **Papéis no backend** (`core/security.py`: `COMERCIAL`, `SERVICOS`, `FINANCEIRO`,
   `DIRETORIA`) espelham `frontend/src/auth/permissoes.ts` nas rotas que o agente lê —
   valem para login e agente. `DIRETORIA` é por **id** (1, 3, 4), não por papel, de
-  propósito. Mudou a matriz lá, muda aqui. Rotas fora da lista do agente seguem só com
-  `exigir_usuario`.
+  propósito. Mudou a matriz lá, muda aqui. Também conferem papel as irmãs fora da
+  lista: `/centro_custo/config/` (DIRETORIA), as listas `/contas_*/` (FINANCEIRO),
+  `PATCH /notas_fiscais/{id}/tipo` (COMERCIAL) e as escritas de `/estoque/` (ADMIN).
 - O `Dockerfile` copia apenas `app/` e `requirements.txt`; `migrations/` e os scripts da
   raiz não entram na imagem.
 - Produção é o serviço `datacore-api` do EasyPanel, que builda `backend/` com o `Dockerfile` desta pasta.

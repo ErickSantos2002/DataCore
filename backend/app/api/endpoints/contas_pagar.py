@@ -35,7 +35,7 @@ def get_db():
         db.close()
 
 
-@router.get("/", response_model=List[ContasPagar])
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=List[ContasPagar])
 def listar_contas_pagar(
     situacao: Optional[str] = Query(None),
     data_inicio: Optional[str] = Query(None),

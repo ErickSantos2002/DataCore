@@ -3,6 +3,16 @@
 O que mudou no DataCore, do mais novo para o mais antigo. Deploy é manual pelo
 EasyPanel: a data é a do código em `main`, não a de quando foi ao ar.
 
+## 10/11/2026 — Papel nas rotas irmãs
+
+**API (`datacore-api`)** — só login; o token de agente segue recusado nelas.
+
+- `/centro_custo/config/` (ler e salvar) → usuários 1, 3 e 4, como o relatório que ela
+  configura. Antes qualquer logado alterava.
+- Listas `/contas_pagar/` e `/contas_receber/` → admin, financeiro, como os resumos.
+- `PATCH /notas_fiscais/{id}/tipo` → admin, vendas, financeiro (tela Vendedores).
+- Escritas de `/estoque/` (POST, PUT, DELETE) → só admin; nenhuma tela as usa.
+
 ## 10/11/2026 — Iris e Guardis leem o DataCore
 
 **API (`datacore-api`)**

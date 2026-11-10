@@ -170,7 +170,7 @@ def listar_locacao(
 
     return query.order_by(NotaFiscalModel.data_emissao.desc()).all()
 
-@router.patch("/{nota_id}/tipo", response_model=NotaFiscal)
+@router.patch("/{nota_id}/tipo", dependencies=[Depends(acesso.COMERCIAL)], response_model=NotaFiscal)
 def atualizar_tipo_nota(
     nota_id: int = Path(..., description="ID da nota fiscal"),
     payload: NotaFiscalUpdateTipo = None,

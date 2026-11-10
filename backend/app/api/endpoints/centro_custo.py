@@ -75,7 +75,7 @@ def resumo_produto(
     ]
 
 
-@router.get("/config/")
+@router.get("/config/", dependencies=[Depends(acesso.DIRETORIA)])
 def get_config(
     produto: str = Query(...),
     ano: int = Query(...),
@@ -94,7 +94,7 @@ def get_config(
     return cfg
 
 
-@router.post("/config/", response_model=CentroCustoConfig)
+@router.post("/config/", dependencies=[Depends(acesso.DIRETORIA)], response_model=CentroCustoConfig)
 def salvar_config(
     payload: CentroCustoConfigCreate,
     db: Session = Depends(get_db),

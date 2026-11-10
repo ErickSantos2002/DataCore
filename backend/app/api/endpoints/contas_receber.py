@@ -30,7 +30,7 @@ def get_db():
         db.close()
 
 
-@router.get("/", response_model=List[ContasReceber])
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=List[ContasReceber])
 def listar_contas_receber(
     situacao: Optional[str] = Query(None),
     data_inicio: Optional[str] = Query(None),

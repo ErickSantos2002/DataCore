@@ -222,6 +222,7 @@ FINANCEIRO = exigir_papeis("admin", "financeiro", mensagem="Acesso restrito ao f
 # NÃO TROQUE POR PAPEL: Financeiro e Locação são liberadas para estas pessoas por
 # decisão da chefia — ver o comentário de `/financeiro` no permissoes.ts.
 DIRETORIA = exigir_usuarios(1, 3, 4, mensagem="Acesso restrito.")
+ADMIN = exigir_admin
 
 
 def exigir_usuario(
