@@ -102,6 +102,17 @@ Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por ba
   `auth.sso_tickets` (hash + usuario_id, 60 s), não em memória: pode ter réplica.
   Os testes zeram as `MS_*` no `conftest.py` porque o `.env` local tem o secret
   real; SSO ligado só pela fixture `sso`. Spec: `docs/superpowers/specs/2026-09-24-login-microsoft-design.md`.
+- **Token de agente do HS.OS** (`core/agente.py`, Iris e Guardis): JWT EdDSA,
+  `iss=hsos`, `aud=datacore`, `exp` ≤ 600 s, chave em `HSOS_AGENTE_CHAVE_PUBLICA`. O
+  `sub` (e-mail) vira o usuário de `auth.usuarios` e vale o que o login dele valeria.
+  Só é aceito em **GET** das rotas de `ROTAS_DO_AGENTE` (`core/security.py`, lista
+  fechada, espelho de `app/datacore_consultas.py` do HS.OS); fora dela, 403 — rota nova
+  nasce fechada.
+- **Papéis no backend** (`core/security.py`: `COMERCIAL`, `SERVICOS`, `FINANCEIRO`,
+  `DIRETORIA`) espelham `frontend/src/auth/permissoes.ts` nas rotas que o agente lê —
+  valem para login e agente. `DIRETORIA` é por **id** (1, 3, 4), não por papel, de
+  propósito. Mudou a matriz lá, muda aqui. Rotas fora da lista do agente seguem só com
+  `exigir_usuario`.
 - O `Dockerfile` copia apenas `app/` e `requirements.txt`; `migrations/` e os scripts da
   raiz não entram na imagem.
 - Produção é o serviço `datacore-api` do EasyPanel, que builda `backend/` com o `Dockerfile` desta pasta.

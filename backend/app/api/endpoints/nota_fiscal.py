@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, text
 from typing import List, Optional
@@ -19,7 +20,7 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/", response_model=Pagina[NotaFiscal])
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Pagina[NotaFiscal])
 def listar_notas_fiscais(
     id_cliente: Optional[int] = Query(None),
     data_emissao: Optional[str] = Query(None),
@@ -87,7 +88,7 @@ def listar_notas_fiscais(
 #
 # Zero linhas em uma semana que inclua fechamento de mês → pode sair, junto com
 # `app/core/faturamento.py`, que existe só para servi-lo.
-@router.get("/vendas/", response_model=List[NotaFiscal], deprecated=True)
+@router.get("/vendas/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=List[NotaFiscal], deprecated=True)
 def listar_vendas(
     id_cliente: Optional[int] = Query(None),
     data_emissao: Optional[str] = Query(None),
@@ -128,7 +129,7 @@ def listar_vendas(
     return query.all()
 
 # Novo endpoint: /locacao/  → notas com o marcador "Locação"
-@router.get("/locacao/", response_model=List[NotaFiscal])
+@router.get("/locacao/", dependencies=[Depends(acesso.DIRETORIA)], response_model=List[NotaFiscal])
 def listar_locacao(
     id_cliente: Optional[int] = Query(None),
     data_emissao: Optional[str] = Query(None),

@@ -73,11 +73,21 @@ def test_toda_rota_de_dados_esta_protegida():
     # Pega o router novo que alguém registrar sem dependencies=PROTEGIDO.
     from app.main import app
 
+    # O FastAPI 0.141 aninha os routers incluídos (_IncludedRouter): só olhar
+    # app.routes via APIRoute enxergava apenas "/", e este teste passava sem checar nada.
+    def andar(rotas):
+        for r in rotas:
+            if hasattr(r, "effective_route_contexts"):
+                yield from r.effective_route_contexts()
+            elif isinstance(r, APIRoute):
+                yield r
+
+    todas = list(andar(app.routes))
+    assert len(todas) > 50, "o caminhador de rotas não achou as rotas dos routers"
     abertas = [
         r.path
-        for r in app.routes
-        if isinstance(r, APIRoute)
-        and r.path != "/"
+        for r in todas
+        if r.path != "/"
         and not r.path.startswith("/auth")
         and not any(d.dependency is exigir_usuario for d in r.dependencies)
     ]

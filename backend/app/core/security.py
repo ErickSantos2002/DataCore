@@ -12,7 +12,9 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import func, select
 
+from app.core.agente import TokenDeAgenteInvalido, eh_token_de_agente, validar_token_de_agente
 from app.core.config import settings
 from app.models.database import SessionLocal
 from app.models.usuario import Usuario
@@ -93,9 +95,85 @@ def usuario_do_token(token: str) -> Optional[Usuario]:
         db.close()
 
 
+def recusar_agente() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ação não permitida para o agente.")
+
+
+def usuario_do_token_de_agente(token: str) -> Usuario:
+    """Token de agente do HS.OS → o usuário do `sub`, com as permissões que ele já tem.
+
+    Qualquer falha (assinatura, aud, exp, e-mail sem usuário) é 401. O e-mail casa
+    exato, em minúsculas dos dois lados.
+    """
+    try:
+        email, bot = validar_token_de_agente(token, settings.HSOS_AGENTE_CHAVE_PUBLICA)
+    except TokenDeAgenteInvalido as erro:
+        logger.warning("Token de agente recusado: %s", erro)
+        raise nao_autenticado()
+    db = SessionLocal()
+    try:
+        usuario = db.execute(
+            select(Usuario).where(func.lower(Usuario.email) == email)
+        ).scalar_one_or_none()
+    finally:
+        db.close()
+    if usuario is None:
+        logger.warning("Token de agente sem usuário: %r via %r", email, bot)
+        raise nao_autenticado()
+    logger.info("Token de agente: %s via %s", usuario.username, bot)
+    return usuario
+
+
+# As rotas que aceitam o token de agente do HS.OS (Iris e Guardis). Lista explícita
+# e fechada: rota nova nasce recusando o agente (403) até entrar aqui. Só GET — o
+# método é conferido à parte, então nem uma escrita no mesmo caminho passa.
+# O HS.OS tem o espelho disto em `app/datacore_consultas.py`.
+# O agente vale como a pessoa do `sub`: o que a rota exige do login (papel, se
+# houver `exigir_papeis`) exige dele também, nada a mais.
+ROTAS_DO_AGENTE = frozenset({
+    "/clientes/", "/clientes/{id}",
+    "/estoque/", "/estoque/{estoque_id}",
+    "/faturamento/resumo", "/faturamento/filtros", "/faturamento/mensal",
+    "/faturamento/vendas", "/faturamento/vendas/{id_nota}/observacoes",
+    "/faturamento/servicos", "/faturamento/servicos/resumo",
+    "/notas_fiscais/", "/notas_fiscais/vendas/", "/notas_fiscais/locacao/",
+    "/notas_servico/", "/itens_nota/", "/itens_nota/{id}",
+    "/contas_receber/resumo", "/contas_receber/pagina",
+    "/contas_pagar/resumo", "/contas_pagar/pagina",
+    "/inadimplencia/resumo", "/inadimplencia/empresas", "/inadimplencia/empresas/{empresa}",
+    "/inadimplencia/empresas/{empresa}/titulos", "/inadimplencia/indicadores",
+    "/centro_custo/resumo_produto/",
+})
+
+
+def rota_aceita_agente(request: Request) -> bool:
+    rota = request.scope.get("route")
+    return request.method == "GET" and getattr(rota, "path", None) in ROTAS_DO_AGENTE
+
+
+def usuario_do_agente(request: Request, token: str) -> Usuario:
+    """Token de agente numa requisição: 403 fora da lista, senão o usuário do `sub`.
+
+    Fora da lista recusa antes de validar: rota fechada não diz se o token era bom.
+    O usuário fica em `request.state` — `exigir_usuario` e `usuario_atual` rodam os
+    dois na mesma requisição e não precisam ir ao banco duas vezes.
+    """
+    if not rota_aceita_agente(request):
+        raise recusar_agente()
+    usuario = getattr(request.state, "usuario_do_agente", None)
+    if usuario is None:
+        usuario = usuario_do_token_de_agente(token)
+        request.state.usuario_do_agente = usuario
+    return usuario
+
+
 def usuario_atual(
+    request: Request,
     credenciais: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
 ) -> Usuario:
+    """O usuário logado — ou, nas `ROTAS_DO_AGENTE`, o da pessoa do token de agente."""
+    if credenciais and eh_token_de_agente(credenciais.credentials):
+        return usuario_do_agente(request, credenciais.credentials)
     usuario = usuario_do_token(credenciais.credentials) if credenciais else None
     if usuario is None:
         raise nao_autenticado()
@@ -123,6 +201,29 @@ def exigir_papeis(*papeis: str, mensagem: str = "Acesso restrito."):
     return _exigir
 
 
+def exigir_usuarios(*ids: int, mensagem: str = "Acesso restrito."):
+    """Como `exigir_papeis`, mas por id de usuário — liberação nominal."""
+    permitidos = set(ids)
+
+    def _exigir(usuario: Usuario = Depends(usuario_atual)) -> Usuario:
+        if usuario.id not in permitidos:
+            raise HTTPException(status_code=403, detail=mensagem)
+        return usuario
+
+    return _exigir
+
+
+# Espelho no backend da matriz do front (`frontend/src/auth/permissoes.ts`), para as
+# rotas que o token de agente lê: até 10/11/2026 só a Inadimplência conferia papel
+# aqui, e o resto confiava no menu. Mudou lá, muda aqui.
+COMERCIAL = exigir_papeis("admin", "vendas", "financeiro", mensagem="Acesso restrito ao comercial.")
+SERVICOS = exigir_papeis("admin", "servicos", "financeiro", mensagem="Acesso restrito a serviços.")
+FINANCEIRO = exigir_papeis("admin", "financeiro", mensagem="Acesso restrito ao financeiro.")
+# NÃO TROQUE POR PAPEL: Financeiro e Locação são liberadas para estas pessoas por
+# decisão da chefia — ver o comentário de `/financeiro` no permissoes.ts.
+DIRETORIA = exigir_usuarios(1, 3, 4, mensagem="Acesso restrito.")
+
+
 def exigir_usuario(
     request: Request,
     credenciais: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
@@ -136,6 +237,10 @@ def exigir_usuario(
     O caminho vai no log com %r (repr): assim um path forjado com %0A vira
     "'...\\n...'" em vez de quebrar em duas linhas de log.
     """
+    if credenciais and eh_token_de_agente(credenciais.credentials):
+        # Fora das ROTAS_DO_AGENTE é 403, e token ruim é 401 — mesmo com
+        # AUTH_OBRIGATORIA=false: token de agente nunca cai no "deixa passar".
+        return usuario_do_agente(request, credenciais.credentials)
     usuario = usuario_do_token(credenciais.credentials) if credenciais else None
     if usuario is not None:
         return usuario

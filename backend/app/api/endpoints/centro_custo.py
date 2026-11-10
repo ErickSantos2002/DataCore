@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from typing import List, Optional
@@ -28,7 +29,7 @@ def get_db():
 NOTAS_DE_VENDA = "SELECT DISTINCT id_nota FROM gold.fato_vendas"
 
 
-@router.get("/resumo_produto/")
+@router.get("/resumo_produto/", dependencies=[Depends(acesso.DIRETORIA)])
 def resumo_produto(
     ano: int = Query(...),
     produto: str = Query(...),

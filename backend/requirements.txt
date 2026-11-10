@@ -10,5 +10,5 @@ gunicorn
 requests
 lxml
 alembic
-PyJWT
+PyJWT[crypto]  # crypto: EdDSA do token de agente do HS.OS
 bcrypt

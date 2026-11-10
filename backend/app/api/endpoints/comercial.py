@@ -48,6 +48,7 @@ from datetime import date
 from typing import List
 
 from fastapi import APIRouter, Depends
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -316,7 +317,7 @@ class ResumoComercial(BaseModel):
     por_cliente: List[LinhaDeCliente]
 
 
-@router.get("/resumo", response_model=ResumoComercial)
+@router.get("/resumo", dependencies=[Depends(acesso.COMERCIAL)], response_model=ResumoComercial)
 def resumo(filtros: FiltrosComerciais = Depends(), db: Session = Depends(get_db)):
     """Tudo que as quatro telas do Comercial desenham, para um mesmo recorte.
 
@@ -431,7 +432,7 @@ class Filtros(BaseModel):
     produtos: List[ProdutoDoFiltro]
 
 
-@router.get("/filtros", response_model=Filtros)
+@router.get("/filtros", dependencies=[Depends(acesso.COMERCIAL)], response_model=Filtros)
 def filtros(db: Session = Depends(get_db)):
     """As opções dos multiselects, montadas pelo banco.
 

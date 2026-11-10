@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, timedelta
@@ -33,7 +34,7 @@ def get_db():
 # Continua no ar pelo mesmo motivo do `/notas_fiscais/vendas/`: é rota pública, o
 # DataCoreHS parou de chamá-la hoje, e o log de acesso só existe desde 08/09. O critério
 # de remoção é o mesmo, e está escrito em `endpoints/nota_fiscal.py`.
-@router.get("/", response_model=List[NotaServico], deprecated=True)
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=List[NotaServico], deprecated=True)
 def listar_notas_servico(
     cpf_cnpj_tomador: Optional[str] = Query(None),
     cpf_cnpj_prestador: Optional[str] = Query(None),

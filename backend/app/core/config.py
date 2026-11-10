@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     MS_REDIRECT_URI: str = ""
     FRONTEND_URL: str = ""
 
+    # Token de agente do HS.OS (a Iris lendo a Inadimplência como a pessoa que
+    # perguntou). PEM Ed25519 de GET hsosapi.healthsafetytech.com/agente/chave-publica;
+    # \n literal é aceito. Vazio = token de agente sempre recusado (401).
+    HSOS_AGENTE_CHAVE_PUBLICA: str = ""
+
     @property
     def sso_ativo(self) -> bool:
         return all((

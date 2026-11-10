@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -18,7 +19,7 @@ def get_db():
         db.close()
 
 # GET /itens_nota - listar com filtros opcionais
-@router.get("/", response_model=Pagina[ItemNota])
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Pagina[ItemNota])
 def listar_itens(
     id_nota: Optional[int] = Query(None),
     id_produto: Optional[str] = Query(None),
@@ -39,7 +40,7 @@ def listar_itens(
     return paginar(query, limite, offset)
 
 # GET /itens_nota/{id} - obter item específico
-@router.get("/{id}", response_model=ItemNota)
+@router.get("/{id}", dependencies=[Depends(acesso.FINANCEIRO)], response_model=ItemNota)
 def obter_item(id: int, db: Session = Depends(get_db)):
     item = db.query(ItemNotaModel).filter(ItemNotaModel.id == id).first()
 

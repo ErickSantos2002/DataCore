@@ -30,6 +30,7 @@ from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -305,7 +306,7 @@ class PaginaDeVendas(BaseModel):
     offset: int
 
 
-@router.get("/vendas", response_model=PaginaDeVendas)
+@router.get("/vendas", dependencies=[Depends(acesso.COMERCIAL)], response_model=PaginaDeVendas)
 def vendas(
     filtros: FiltrosComerciais = Depends(),
     busca: str | None = Query(
@@ -355,7 +356,7 @@ def vendas(
     )
 
 
-@router.get("/vendas/{id_nota}/observacoes")
+@router.get("/vendas/{id_nota}/observacoes", dependencies=[Depends(acesso.COMERCIAL)])
 def observacoes_da_venda(id_nota: int, db: Session = Depends(get_db)):
     """O texto das observações de uma nota, sob demanda.
 
@@ -627,7 +628,7 @@ class PaginaDeServicos(BaseModel):
     offset: int
 
 
-@router.get("/servicos", response_model=PaginaDeServicos)
+@router.get("/servicos", dependencies=[Depends(acesso.SERVICOS)], response_model=PaginaDeServicos)
 def servicos(
     filtros: FiltrosDeServicos = Depends(),
     busca: str | None = Query(
@@ -711,7 +712,7 @@ def servicos(
 
 
 
-@router.get("/servicos/resumo", response_model=ResumoDeServicos)
+@router.get("/servicos/resumo", dependencies=[Depends(acesso.SERVICOS)], response_model=ResumoDeServicos)
 def resumo_de_servicos(
     filtros: FiltrosDeServicos = Depends(), db: Session = Depends(get_db)
 ):

@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -79,7 +80,7 @@ def listar_contas_receber(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@router.get("/resumo", response_model=ResumoDeContas)
+@router.get("/resumo", dependencies=[Depends(acesso.FINANCEIRO)], response_model=ResumoDeContas)
 def resumo_contas_receber(
     situacao: Optional[List[str]] = Query(None, description="Situações (repetível)"),
     categoria: Optional[List[str]] = Query(None, description="Categorias (repetível)"),
@@ -121,7 +122,7 @@ def resumo_contas_receber(
     )
 
 
-@router.get("/pagina", response_model=PaginaDeContas)
+@router.get("/pagina", dependencies=[Depends(acesso.FINANCEIRO)], response_model=PaginaDeContas)
 def pagina_contas_receber(
     situacao: Optional[List[str]] = Query(None),
     categoria: Optional[List[str]] = Query(None),
