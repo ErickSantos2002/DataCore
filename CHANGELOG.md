@@ -12,6 +12,12 @@ EasyPanel: a data é a do código em `main`, não a de quando foi ao ar.
 - Listas `/contas_pagar/` e `/contas_receber/` → admin, financeiro, como os resumos.
 - `PATCH /notas_fiscais/{id}/tipo` → admin, vendas, financeiro (tela Vendedores).
 - Escritas de `/estoque/` (POST, PUT, DELETE) → só admin; nenhuma tela as usa.
+- `/operacao/importacoes`, `/execucoes`, `/avisos` e `POST /notas_servico/importar` → só
+  admin (tela Importações; o job de NFS-e roda no processo, não chama o endpoint).
+- `/enderecos_entrega/`, `/formas_envio/`, `/marcadores/` → admin, financeiro; nenhuma
+  tela as usa.
+- Seguem só com login, porque o Dashboard (livre) as lê: `GET /configuracoes/` e
+  `GET /operacao/atualizacao-manual`.
 
 ## 10/11/2026 — Iris e Guardis leem o DataCore
 

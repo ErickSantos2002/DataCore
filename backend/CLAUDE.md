@@ -113,7 +113,11 @@ Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por ba
   valem para login e agente. `DIRETORIA` é por **id** (1, 3, 4), não por papel, de
   propósito. Mudou a matriz lá, muda aqui. Também conferem papel as irmãs fora da
   lista: `/centro_custo/config/` (DIRETORIA), as listas `/contas_*/` (FINANCEIRO),
-  `PATCH /notas_fiscais/{id}/tipo` (COMERCIAL) e as escritas de `/estoque/` (ADMIN).
+  `PATCH /notas_fiscais/{id}/tipo` (COMERCIAL), as escritas de `/estoque/`, os GETs
+  de importações/execuções/avisos de `/operacao/` e `POST /notas_servico/importar`
+  (ADMIN), e endereços, formas de envio e marcadores (FINANCEIRO). Só com login, de
+  propósito: `GET /configuracoes/` e `GET /operacao/atualizacao-manual`, que o Dashboard
+  (livre) lê.
 - O `Dockerfile` copia apenas `app/` e `requirements.txt`; `migrations/` e os scripts da
   raiz não entram na imagem.
 - Produção é o serviço `datacore-api` do EasyPanel, que builda `backend/` com o `Dockerfile` desta pasta.

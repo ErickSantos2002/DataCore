@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -18,7 +19,7 @@ def get_db():
         db.close()
 
 # GET /enderecos_entrega - listar todos com filtros opcionais
-@router.get("/", response_model=Pagina[EnderecoEntrega])
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Pagina[EnderecoEntrega])
 def listar_enderecos(
     id_nota: Optional[int] = Query(None),
     cpf_cnpj: Optional[str] = Query(None),
@@ -39,7 +40,7 @@ def listar_enderecos(
     return paginar(query, limite, offset)
 
 # GET /enderecos_entrega/{id}
-@router.get("/{id}", response_model=EnderecoEntrega)
+@router.get("/{id}", dependencies=[Depends(acesso.FINANCEIRO)], response_model=EnderecoEntrega)
 def obter_endereco(id: int, db: Session = Depends(get_db)):
     endereco = db.query(EnderecoEntregaModel).filter(EnderecoEntregaModel.id == id).first()
 

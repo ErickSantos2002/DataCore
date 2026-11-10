@@ -20,6 +20,7 @@ from datetime import date
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -112,7 +113,7 @@ class PaginaDeExecucoes(BaseModel):
     total: int
 
 
-@router.get("/avisos", response_model=List[AvisoCarga])
+@router.get("/avisos", dependencies=[Depends(acesso.ADMIN)], response_model=List[AvisoCarga])
 def avisos_das_cargas(
     apenas_problemas: bool = Query(True, description="false devolve também as cargas em dia"),
     db: Session = Depends(get_db),
@@ -134,7 +135,7 @@ def avisos_das_cargas(
     return [AvisoCarga(**dict(linha)) for linha in linhas]
 
 
-@router.get("/importacoes", response_model=List[Importacao])
+@router.get("/importacoes", dependencies=[Depends(acesso.ADMIN)], response_model=List[Importacao])
 def importacoes(db: Session = Depends(get_db)):
     """O catálogo das importações com o estado e o desempenho de cada uma.
 
@@ -158,7 +159,7 @@ def importacoes(db: Session = Depends(get_db)):
     return resultado
 
 
-@router.get("/execucoes", response_model=PaginaDeExecucoes)
+@router.get("/execucoes", dependencies=[Depends(acesso.ADMIN)], response_model=PaginaDeExecucoes)
 def historico_de_execucoes(
     job: Optional[str] = Query(None, description="filtra por job (extrair_notas, ...)"),
     de: Optional[date] = Query(None, description="primeiro dia (horário de Brasília)"),

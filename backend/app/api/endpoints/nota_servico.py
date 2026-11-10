@@ -88,7 +88,7 @@ def listar_notas_servico(
         )
 
 
-@router.post("/importar")
+@router.post("/importar", dependencies=[Depends(acesso.ADMIN)])
 def importar_nfse_recife(
     data_inicial: Optional[date] = Query(None, description="Data inicial (padrão: ontem)"),
     data_final: Optional[date] = Query(None, description="Data final (padrão: hoje)"),

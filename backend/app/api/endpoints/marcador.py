@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core import security as acesso  # papéis: espelho de permissoes.ts
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -18,7 +19,7 @@ def get_db():
         db.close()
 
 # GET /marcadores - listar com filtros
-@router.get("/", response_model=Pagina[Marcador])
+@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Pagina[Marcador])
 def listar_marcadores(
     id_nota: Optional[int] = Query(None),
     id_marcador: Optional[str] = Query(None),
@@ -39,7 +40,7 @@ def listar_marcadores(
     return paginar(query, limite, offset)
 
 # GET /marcadores/{id}
-@router.get("/{id}", response_model=Marcador)
+@router.get("/{id}", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Marcador)
 def obter_marcador(id: int, db: Session = Depends(get_db)):
     marcador = db.query(MarcadorModel).filter(MarcadorModel.id == id).first()
 

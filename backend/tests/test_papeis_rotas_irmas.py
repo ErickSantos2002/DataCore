@@ -20,6 +20,19 @@ REGRAS = [
     ("POST", "/estoque/", {"admin"}),
     ("PUT", "/estoque/1", {"admin"}),
     ("DELETE", "/estoque/1", {"admin"}),
+    ("POST", "/notas_servico/importar", {"admin"}),
+    ("GET", "/operacao/avisos", {"admin"}),
+    ("GET", "/operacao/importacoes", {"admin"}),
+    ("GET", "/operacao/execucoes", {"admin"}),
+    ("GET", "/enderecos_entrega/", {"admin", "financeiro"}),
+    ("GET", "/enderecos_entrega/1", {"admin", "financeiro"}),
+    ("GET", "/formas_envio/", {"admin", "financeiro"}),
+    ("GET", "/formas_envio/1", {"admin", "financeiro"}),
+    ("GET", "/marcadores/", {"admin", "financeiro"}),
+    ("GET", "/marcadores/1", {"admin", "financeiro"}),
+    # O Dashboard (livre) lê estas duas: ficam para qualquer logado.
+    ("GET", "/configuracoes/", {"comum", "vendas", "servicos", "admin", "financeiro"}),
+    ("GET", "/operacao/atualizacao-manual", {"comum", "vendas", "servicos", "admin", "financeiro"}),
 ]
 
 

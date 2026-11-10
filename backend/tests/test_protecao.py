@@ -12,7 +12,19 @@ def flag_ligada(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_OBRIGATORIA", True)
 
 
-def test_flag_desligada_anonimo_passa_e_gera_warning(client, caplog):
+@pytest.fixture
+def sem_papel():
+    """Desliga o papel de /marcadores/ (admin, financeiro desde 10/11/2026): estes
+    testes são do `exigir_usuario` do PROTEGIDO, não da matriz de papéis."""
+    from app.core import security
+    from app.main import app
+
+    app.dependency_overrides[security.FINANCEIRO] = lambda: None
+    yield
+    app.dependency_overrides.pop(security.FINANCEIRO, None)
+
+
+def test_flag_desligada_anonimo_passa_e_gera_warning(client, caplog, sem_papel):
     with caplog.at_level(logging.WARNING, logger="app.auth"):
         r = client.get("/marcadores/")
     assert r.status_code == 200
@@ -20,7 +32,7 @@ def test_flag_desligada_anonimo_passa_e_gera_warning(client, caplog):
     assert "'/marcadores/'" in caplog.text
 
 
-def test_flag_desligada_token_invalido_passa_e_gera_warning(client, caplog):
+def test_flag_desligada_token_invalido_passa_e_gera_warning(client, caplog, sem_papel):
     with caplog.at_level(logging.WARNING, logger="app.auth"):
         r = client.get("/marcadores/", headers={"Authorization": "Bearer lixo"})
     assert r.status_code == 200
@@ -40,7 +52,7 @@ def test_flag_desligada_path_forjado_com_quebra_de_linha_nao_forja_o_log(client,
         assert "\n" not in registro.getMessage()
 
 
-def test_token_valido_nao_gera_warning(client, comum, caplog):
+def test_token_valido_nao_gera_warning(client, comum, caplog, sem_papel):
     with caplog.at_level(logging.WARNING, logger="app.auth"):
         r = client.get("/marcadores/", headers=comum.headers)
     assert r.status_code == 200
@@ -54,7 +66,7 @@ def test_flag_ligada_bloqueia_anonimo_e_token_invalido(client, flag_ligada):
         assert r.headers["www-authenticate"] == "Bearer"
 
 
-def test_flag_ligada_libera_usuario_logado(client, comum, flag_ligada):
+def test_flag_ligada_libera_usuario_logado(client, comum, flag_ligada, sem_papel):
     assert client.get("/marcadores/", headers=comum.headers).status_code == 200
 
 

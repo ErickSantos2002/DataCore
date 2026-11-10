@@ -246,7 +246,7 @@ def test_job_grava_notas_e_depois_cancela(db, monkeypatch):
 
 # ------------------------------------------------------------------ endpoint manual
 
-def test_endpoint_importar_tambem_cancela(db, client, monkeypatch):
+def test_endpoint_importar_tambem_cancela(db, client, admin, monkeypatch):
     # Mesmo sem nota nova no período, o cancelamento de uma nota antiga tem que entrar:
     # o endpoint devolvia cedo com "Nenhuma NFSe encontrada".
     import importlib
@@ -266,7 +266,7 @@ def test_endpoint_importar_tambem_cancela(db, client, monkeypatch):
     monkeypatch.setattr(nota_servico, "NFSeRecifeNacionalService", ServicoFalso)
     monkeypatch.setattr(type(nota_servico.settings), "get_cert_paths", lambda self: ("c", "k"))
 
-    r = client.post("/notas_servico/importar")
+    r = client.post("/notas_servico/importar", headers=admin.headers)
 
     assert r.status_code == 200, r.text
     assert r.json()["total_canceladas"] == 1
