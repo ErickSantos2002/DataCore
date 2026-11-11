@@ -100,6 +100,8 @@ app.include_router(endpoints.operacao, dependencies=PROTEGIDO)
 app.include_router(endpoints.faturamento, dependencies=PROTEGIDO)
 # Os recortes agregados das quatro telas do Comercial, somados no banco (item 9.4).
 app.include_router(endpoints.comercial, dependencies=PROTEGIDO)
+# Notas de entrada: aba do Gerenciamento Financeiro (CFOP do item 1/2/3).
+app.include_router(endpoints.nota_entrada, dependencies=PROTEGIDO)
 
 # Health check
 @app.get("/")

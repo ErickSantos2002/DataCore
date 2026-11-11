@@ -15,3 +15,4 @@ from .operacao import router as operacao
 from .faturamento import router as faturamento
 from .comercial import router as comercial
 from .auth import router as auth
+from .nota_entrada import router as nota_entrada

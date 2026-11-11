@@ -118,6 +118,8 @@ Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por ba
   (ADMIN), e endereços, formas de envio e marcadores (FINANCEIRO). Só com login, de
   propósito: `GET /configuracoes/` e `GET /operacao/atualizacao-manual`, que o Dashboard
   (livre) lê.
+- **Notas de entrada** (`core/notas_entrada.py`): entrada = item com CFOP 1/2/3, nunca
+  `tipo_nota`. Mesmo critério de "CFOP do item decide" da régua de venda do dbt.
 - O `Dockerfile` copia apenas `app/` e `requirements.txt`; `migrations/` e os scripts da
   raiz não entram na imagem.
 - Produção é o serviço `datacore-api` do EasyPanel, que builda `backend/` com o `Dockerfile` desta pasta.

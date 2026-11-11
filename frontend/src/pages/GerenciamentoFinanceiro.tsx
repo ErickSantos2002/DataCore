@@ -13,6 +13,7 @@ import { useContasPagar } from "../context/ContasPagarContext";
 import AbaCentroCusto from "./financeiro/AbaCentroCusto";
 import AbaComissao from "./financeiro/AbaComissao";
 import AbaMeta from "./financeiro/AbaMeta";
+import AbaNotasEntrada from "./financeiro/AbaNotasEntrada";
 import { AbaBalancete } from "./financeiro/AbaBalancete";
 import { AbaVisaoGeral } from "./financeiro/AbaVisaoGeral";
 import {
@@ -30,13 +31,14 @@ import {
 } from "./financeiro/financeiro";
 import { useFaturamento } from "./financeiro/useFaturamento";
 
-/** As quatro abas da tela, na ordem em que aparecem. */
+/** As abas da tela, na ordem em que aparecem. */
 const ABAS = [
   { valor: "visaoGeral", rotulo: "Visão Geral" },
   { valor: "balancete", rotulo: "Balancete" },
   { valor: "centroCusto", rotulo: "Centro de Custo" },
   { valor: "meta", rotulo: "Meta" },
   { valor: "comissao", rotulo: "Calculadora de Comissão" },
+  { valor: "notasEntrada", rotulo: "Notas de Entrada" },
 ] as const;
 
 /**
@@ -218,6 +220,10 @@ const GerenciamentoFinanceiro: React.FC = () => {
 
         <TabsContent value="comissao">
           <AbaComissao />
+        </TabsContent>
+
+        <TabsContent value="notasEntrada">
+          <AbaNotasEntrada />
         </TabsContent>
       </Tabs>
     </div>
