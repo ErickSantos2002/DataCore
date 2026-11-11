@@ -80,6 +80,7 @@ const PERFIS: ReadonlyArray<{
       "/inicio",
       "/dashboard",
       "/estoque",
+      "/clientes",
       "/vendas",
       "/produtos",
       "/vendedores",

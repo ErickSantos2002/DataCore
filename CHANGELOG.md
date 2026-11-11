@@ -23,6 +23,8 @@ Pedido do dono e do financeiro.
 
 **Painel (`datacore-sistema`)**
 
+- A página Clientes volta a abrir para o papel vendas (desfaz a mudança de 01/10).
+  O backend já liberava: a tela lê as rotas do comercial.
 - Aba "Notas de Entrada" no Gerenciamento Financeiro: filtros de ano, situação e tipo;
   valor, quantidade, remetentes e importação; gráfico mês a mês; por tipo; maiores
   remetentes; tabela paginada com busca e ordenação, e os itens da nota num clique.
