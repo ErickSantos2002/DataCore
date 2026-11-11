@@ -143,6 +143,7 @@ ROTAS_DO_AGENTE = frozenset({
     "/inadimplencia/resumo", "/inadimplencia/empresas", "/inadimplencia/empresas/{empresa}",
     "/inadimplencia/empresas/{empresa}/titulos", "/inadimplencia/indicadores",
     "/centro_custo/resumo_produto/",
+    "/notas_entrada/resumo", "/notas_entrada/pagina", "/notas_entrada/{id_nota}/itens",
 })
 
 

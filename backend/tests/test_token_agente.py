@@ -178,7 +178,8 @@ LIVRES = {"/estoque/", "/estoque/{estoque_id}", "/faturamento/mensal"}
 COMERCIAL = {"/faturamento/resumo", "/faturamento/filtros", "/faturamento/vendas",
              "/faturamento/vendas/{id_nota}/observacoes"}
 SERVICOS = {"/faturamento/servicos", "/faturamento/servicos/resumo"}
-DIRETORIA = {"/notas_fiscais/locacao/", "/centro_custo/resumo_produto/"}
+DIRETORIA = {"/notas_fiscais/locacao/", "/centro_custo/resumo_produto/",
+             "/notas_entrada/resumo", "/notas_entrada/pagina", "/notas_entrada/{id_nota}/itens"}
 FINANCEIRO = ROTAS_DO_AGENTE - LIVRES - COMERCIAL - SERVICOS - DIRETORIA
 ABRE = {
     "comum": LIVRES,

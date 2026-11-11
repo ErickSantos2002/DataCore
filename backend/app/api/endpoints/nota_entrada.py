@@ -2,7 +2,7 @@
 
 A regra de o que é entrada (CFOP do item 1/2/3, não `tipo_nota`) e as consultas moram
 em `core/notas_entrada.py`. Acesso: o mesmo da página Financeiro (usuários 1, 3 e 4).
-Fora de `ROTAS_DO_AGENTE`: o token de agente leva 403 até alguém decidir liberar.
+Na `ROTAS_DO_AGENTE` desde 11/11/2026 (pedido do HS.OS): o Guardi de quem é da diretoria lê.
 """
 from datetime import date
 from typing import List, Optional

@@ -11,7 +11,8 @@ Pedido do dono e do financeiro.
 
 - Rotas novas `/notas_entrada/resumo`, `/notas_entrada/pagina` e
   `/notas_entrada/{id}/itens`, para os usuários 1, 3 e 4 (o mesmo acesso da página
-  Financeiro). Fora da lista do agente.
+  Financeiro). As três entram na lista do token de agente (pedido do HS.OS): o
+  Guardi de quem é desses usuários lê; o dos outros leva 403.
 - Nota de entrada = nota com item de CFOP iniciado em 1, 2 ou 3. O `tipo_nota` do Tiny
   não serve (grava "N" até em compra). Batendo com o Tiny em 11/11: 340 notas e
   R$ 17.422.702,11 contra 341 e R$ 17.425.352,11, com as situações iguais.
