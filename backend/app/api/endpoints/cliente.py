@@ -19,7 +19,7 @@ def get_db():
         db.close()
 
 # GET /clientes - listar com filtros opcionais
-@router.get("/", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Pagina[Cliente])
+@router.get("/", dependencies=[Depends(acesso.COMERCIAL)], response_model=Pagina[Cliente])
 def listar_clientes(
     cpf_cnpj: Optional[str] = Query(None),
     nome: Optional[str] = Query(None),
@@ -50,7 +50,7 @@ def listar_clientes(
     return paginar(query.order_by(ClienteModel.id), limite, offset)
 
 # GET /clientes/{id} - buscar por ID
-@router.get("/{id}", dependencies=[Depends(acesso.FINANCEIRO)], response_model=Cliente)
+@router.get("/{id}", dependencies=[Depends(acesso.COMERCIAL)], response_model=Cliente)
 def obter_cliente(id: int, db: Session = Depends(get_db)):
     cliente = db.query(ClienteModel).filter(ClienteModel.id == id).first()
 

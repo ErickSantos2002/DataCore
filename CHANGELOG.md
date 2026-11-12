@@ -3,6 +3,17 @@
 O que mudou no DataCore, do mais novo para o mais antigo. Deploy é manual pelo
 EasyPanel: a data é a do código em `main`, não a de quando foi ao ar.
 
+## 12/11/2026 — Clientes liberados para o vendas
+
+**API (`datacore-api`)**
+
+- `GET /clientes/` e `GET /clientes/{id}` → admin, vendas, financeiro (antes admin,
+  financeiro), o mesmo conjunto da página Clientes. Vale para login e token de agente:
+  o Guardi de um SDR pediu um cliente do RS e levou 403. A restrição de 10/11 vinha só
+  de a rota não ter tela, sem motivo próprio. `servicos` e `comum` seguem com 403.
+- As outras rotas antigas da nota de 10/11 (`/notas_fiscais/`, `/notas_servico/`,
+  `/itens_nota/`, `/enderecos_entrega/`) não mudam.
+
 ## 11/11/2026 — Notas de entrada no Gerenciamento Financeiro
 
 Pedido do dono e do financeiro.
@@ -69,7 +80,8 @@ Pedido do dono e do financeiro.
   Antes só a Inadimplência conferia papel; o resto confiava no menu.
   ⚠️ Rotas antigas sem tela (`/clientes/`, `/notas_fiscais/`, `/notas_fiscais/vendas/`,
   `/notas_servico/`, `/itens_nota/`) passam a negar quem não é admin ou financeiro: se
-  algum dashboard externo as usa com outro usuário, leva 403.
+  algum dashboard externo as usa com outro usuário, leva 403. (Em 12/11 `/clientes/`
+  passou a abrir também para o vendas.)
 - Teste que garante `PROTEGIDO` em toda rota de dados voltou a checar de verdade: no
   FastAPI 0.141 ele só enxergava `/` e passava vazio.
 - **Env nova no EasyPanel:** `HSOS_AGENTE_CHAVE_PUBLICA`, o PEM de

@@ -176,7 +176,8 @@ def test_comum_ve_pelo_agente_o_que_ve_pelo_login(client, joao_logado):
 # O que cada papel abre entre as ROTAS_DO_AGENTE — o espelho do permissoes.ts.
 LIVRES = {"/estoque/", "/estoque/{estoque_id}", "/faturamento/mensal"}
 COMERCIAL = {"/faturamento/resumo", "/faturamento/filtros", "/faturamento/vendas",
-             "/faturamento/vendas/{id_nota}/observacoes"}
+             "/faturamento/vendas/{id_nota}/observacoes",
+             "/clientes/", "/clientes/{id}"}  # liberadas ao vendas em 12/11 (Guardi do SDR)
 SERVICOS = {"/faturamento/servicos", "/faturamento/servicos/resumo"}
 DIRETORIA = {"/notas_fiscais/locacao/", "/centro_custo/resumo_produto/",
              "/notas_entrada/resumo", "/notas_entrada/pagina", "/notas_entrada/{id_nota}/itens"}
