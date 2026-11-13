@@ -129,22 +129,58 @@ def usuario_do_token_de_agente(token: str) -> Usuario:
 # método é conferido à parte, então nem uma escrita no mesmo caminho passa.
 # O HS.OS tem o espelho disto em `app/datacore_consultas.py`.
 # O agente vale como a pessoa do `sub`: o que a rota exige do login (papel, se
-# houver `exigir_papeis`) exige dele também, nada a mais.
-ROTAS_DO_AGENTE = frozenset({
-    "/clientes/", "/clientes/{id}",
-    "/estoque/", "/estoque/{estoque_id}",
-    "/faturamento/resumo", "/faturamento/filtros", "/faturamento/mensal",
-    "/faturamento/vendas", "/faturamento/vendas/{id_nota}/observacoes",
-    "/faturamento/servicos", "/faturamento/servicos/resumo",
-    "/notas_fiscais/", "/notas_fiscais/vendas/", "/notas_fiscais/locacao/",
-    "/notas_servico/", "/itens_nota/", "/itens_nota/{id}",
-    "/contas_receber/resumo", "/contas_receber/pagina",
-    "/contas_pagar/resumo", "/contas_pagar/pagina",
-    "/inadimplencia/resumo", "/inadimplencia/empresas", "/inadimplencia/empresas/{empresa}",
-    "/inadimplencia/empresas/{empresa}/titulos", "/inadimplencia/indicadores",
-    "/centro_custo/resumo_produto/",
-    "/notas_entrada/resumo", "/notas_entrada/pagina", "/notas_entrada/{id_nota}/itens",
-})
+# houver `exigir_papeis`) exige dele também, nada a mais. A lista é a chave da tabela
+# abaixo: rota nova no agente entra declarando quem passa.
+# Rota → quem passa nela: um conjunto de papéis, `LIVRE` (qualquer logado) ou
+# `DIRETORIA_IDS` (por id). É a mesma regra das dependências das rotas — o
+# `test_agente_capacidades.py` percorre a lista e confere, papel a papel, que a rota
+# declarada aberta passa e a fechada leva 403. Mudou o papel de uma rota, muda aqui.
+# Daqui sai o `GET /agente/capacidades`, que diz ao HS.OS o que o login alcança.
+LIVRE = "livre"
+PAPEIS_COMERCIAL = frozenset({"admin", "vendas", "financeiro"})
+PAPEIS_SERVICOS = frozenset({"admin", "servicos", "financeiro"})
+PAPEIS_FINANCEIRO = frozenset({"admin", "financeiro"})
+# NÃO TROQUE POR PAPEL: ver o comentário de `DIRETORIA` abaixo.
+DIRETORIA_IDS = frozenset({1, 3, 4})
+
+QUEM_PASSA_NAS_ROTAS_DO_AGENTE = {
+    "/agente/capacidades": LIVRE,
+    "/estoque/": LIVRE, "/estoque/{estoque_id}": LIVRE,
+    "/faturamento/mensal": LIVRE,
+    "/clientes/": PAPEIS_COMERCIAL, "/clientes/{id}": PAPEIS_COMERCIAL,
+    "/faturamento/resumo": PAPEIS_COMERCIAL, "/faturamento/filtros": PAPEIS_COMERCIAL,
+    "/faturamento/vendas": PAPEIS_COMERCIAL,
+    "/faturamento/vendas/{id_nota}/observacoes": PAPEIS_COMERCIAL,
+    "/faturamento/servicos": PAPEIS_SERVICOS, "/faturamento/servicos/resumo": PAPEIS_SERVICOS,
+    "/notas_fiscais/": PAPEIS_FINANCEIRO, "/notas_fiscais/vendas/": PAPEIS_FINANCEIRO,
+    "/notas_fiscais/locacao/": DIRETORIA_IDS,
+    "/notas_servico/": PAPEIS_FINANCEIRO,
+    "/itens_nota/": PAPEIS_FINANCEIRO, "/itens_nota/{id}": PAPEIS_FINANCEIRO,
+    "/contas_receber/resumo": PAPEIS_FINANCEIRO, "/contas_receber/pagina": PAPEIS_FINANCEIRO,
+    "/contas_pagar/resumo": PAPEIS_FINANCEIRO, "/contas_pagar/pagina": PAPEIS_FINANCEIRO,
+    "/inadimplencia/resumo": PAPEIS_FINANCEIRO, "/inadimplencia/empresas": PAPEIS_FINANCEIRO,
+    "/inadimplencia/empresas/{empresa}": PAPEIS_FINANCEIRO,
+    "/inadimplencia/empresas/{empresa}/titulos": PAPEIS_FINANCEIRO,
+    "/inadimplencia/indicadores": PAPEIS_FINANCEIRO,
+    "/centro_custo/resumo_produto/": DIRETORIA_IDS,
+    "/notas_entrada/resumo": DIRETORIA_IDS, "/notas_entrada/pagina": DIRETORIA_IDS,
+    "/notas_entrada/{id_nota}/itens": DIRETORIA_IDS,
+}
+ROTAS_DO_AGENTE = frozenset(QUEM_PASSA_NAS_ROTAS_DO_AGENTE)
+
+
+def passa_na_rota_do_agente(usuario: Usuario, rota: str) -> bool:
+    quem = QUEM_PASSA_NAS_ROTAS_DO_AGENTE[rota]
+    if quem == LIVRE:
+        return True
+    if quem is DIRETORIA_IDS:
+        return usuario.id in DIRETORIA_IDS
+    return usuario.papel.nome in quem
+
+
+def rotas_do_agente_para(usuario: Usuario) -> list[list[str]]:
+    """Os pares (método, template) da lista que este login consegue usar — só GET."""
+    return [["GET", rota] for rota in sorted(ROTAS_DO_AGENTE) if passa_na_rota_do_agente(usuario, rota)]
 
 
 def rota_aceita_agente(request: Request) -> bool:
@@ -217,12 +253,12 @@ def exigir_usuarios(*ids: int, mensagem: str = "Acesso restrito."):
 # Espelho no backend da matriz do front (`frontend/src/auth/permissoes.ts`), para as
 # rotas que o token de agente lê: até 10/11/2026 só a Inadimplência conferia papel
 # aqui, e o resto confiava no menu. Mudou lá, muda aqui.
-COMERCIAL = exigir_papeis("admin", "vendas", "financeiro", mensagem="Acesso restrito ao comercial.")
-SERVICOS = exigir_papeis("admin", "servicos", "financeiro", mensagem="Acesso restrito a serviços.")
-FINANCEIRO = exigir_papeis("admin", "financeiro", mensagem="Acesso restrito ao financeiro.")
+COMERCIAL = exigir_papeis(*PAPEIS_COMERCIAL, mensagem="Acesso restrito ao comercial.")
+SERVICOS = exigir_papeis(*PAPEIS_SERVICOS, mensagem="Acesso restrito a serviços.")
+FINANCEIRO = exigir_papeis(*PAPEIS_FINANCEIRO, mensagem="Acesso restrito ao financeiro.")
 # NÃO TROQUE POR PAPEL: Financeiro e Locação são liberadas para estas pessoas por
 # decisão da chefia — ver o comentário de `/financeiro` no permissoes.ts.
-DIRETORIA = exigir_usuarios(1, 3, 4, mensagem="Acesso restrito.")
+DIRETORIA = exigir_usuarios(*DIRETORIA_IDS, mensagem="Acesso restrito.")
 ADMIN = exigir_admin
 
 

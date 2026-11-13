@@ -3,6 +3,21 @@
 O que mudou no DataCore, do mais novo para o mais antigo. Deploy é manual pelo
 EasyPanel: a data é a do código em `main`, não a de quando foi ao ar.
 
+## 13/11/2026 — O que o Guardi alcança aqui (tela "Capacidade" do HS.OS)
+
+**API (`datacore-api`)**
+
+- Rota nova `GET /agente/capacidades`, só com token de agente (login normal → 404):
+  devolve `{papel, rotas}` — o papel da pessoa para exibir e os pares
+  `["GET", "<rota>"]` da lista do agente que o login dela consegue usar. O HS.OS
+  cruza com os catálogos dele e mostra ao dono do Guardi o que ele pode pedir.
+- Ao lado da lista do agente (`core/security.py`) agora fica declarado quem passa em
+  cada rota (`QUEM_PASSA_NAS_ROTAS_DO_AGENTE`); a lista é a chave dessa tabela. Um
+  teste percorre a lista e confere, papel a papel, que a rota declarada aberta passa e
+  a fechada leva 403 — a tabela não diverge das rotas em silêncio.
+- Inadimplência: o papel é conferido antes de abrir a conexão com o banco (mesmo
+  resultado para quem chama).
+
 ## 12/11/2026 — Clientes liberados para o vendas
 
 **API (`datacore-api`)**

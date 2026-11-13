@@ -19,7 +19,7 @@ from app.core import inadimplencia as consultas
 from app.core.inadimplencia import hoje_na_empresa
 from app.core.contas_agregado import ContaDaTela
 from app.core.paginacao import limite_query, offset_query
-from app.core.security import exigir_papeis
+from app.core.security import PAPEIS_FINANCEIRO, exigir_papeis
 from app.models.database import SessionLocal
 from app.models.usuario import Usuario
 from app.services import anexos, cobranca
@@ -27,7 +27,9 @@ from app.services import anexos, cobranca
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/inadimplencia", tags=["Inadimplência"])
-FINANCEIRO = exigir_papeis("admin", "financeiro", mensagem="Acesso restrito ao financeiro.")
+# Papel antes do banco nas assinaturas: a recusa vem sem abrir sessão (e o teste da
+# tabela de papéis do agente enxerga a recusa).
+FINANCEIRO = exigir_papeis(*PAPEIS_FINANCEIRO, mensagem="Acesso restrito ao financeiro.")
 TODOS_OS_STATUS = cobranca.STATUS_DO_SISTEMA | cobranca.STATUS_MANUAIS
 
 
@@ -61,7 +63,7 @@ def resumo(
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
     sem_contato: Optional[str] = Query(None),
-    db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO),
+    _u: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db),
 ):
     _validar_recorte(status, faixa, data_tipo, data_inicio, data_fim, sem_contato)
     return consultas.resumo(db, hoje_na_empresa(), status=status, faixa=faixa, data_tipo=data_tipo,
@@ -82,8 +84,8 @@ def empresas(
     direcao: str = Query("desc", pattern="^(asc|desc)$"),
     limite: int = limite_query(),
     offset: int = offset_query(),
-    db: Session = Depends(get_db),
     _u: Usuario = Depends(FINANCEIRO),
+    db: Session = Depends(get_db),
 ):
     if ordenar_por not in consultas.ORDENACOES_DE_EMPRESAS:
         raise HTTPException(422, f"`ordenar_por` deve ser um de: {', '.join(consultas.ORDENACOES_DE_EMPRESAS)}.")
@@ -102,12 +104,12 @@ def _detalhe_ou_404(db, empresa):
 
 
 @router.get("/empresas/{empresa}", response_model=consultas.DetalheDaEmpresa)
-def detalhe(empresa: str, db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
+def detalhe(empresa: str, _u: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
     return _detalhe_ou_404(db, empresa)
 
 
 @router.get("/empresas/{empresa}/titulos", response_model=List[ContaDaTela])
-def titulos(empresa: str, db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
+def titulos(empresa: str, _u: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
     return consultas.titulos_da_empresa(db, hoje_na_empresa(), empresa)
 
 
@@ -119,7 +121,7 @@ def indicadores(
     forma_pagamento: Optional[List[str]] = Query(None, description="`__sem__` = sem forma de pagamento."),
     uf: Optional[List[str]] = Query(None, description="UF do cliente; `__sem__` = sem UF."),
     cliente: Optional[str] = Query(None, max_length=120, description="Nome, ou 8+ dígitos do documento."),
-    db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO),
+    _u: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db),
 ):
     try:
         consultas.intervalo_dos_meses(mes_inicio, mes_fim)
@@ -225,7 +227,7 @@ def enviar_anexos(evento_id: int, db: Session = Depends(get_db), usuario: Usuari
 
 
 @router.get("/anexos/{anexo_id}")
-def baixar_anexo(anexo_id: int, db: Session = Depends(get_db), _u: Usuario = Depends(FINANCEIRO)):
+def baixar_anexo(anexo_id: int, _u: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
     try:
         arquivo, linha = anexos.anexo_para_baixar(db, anexo_id)
     except cobranca.ErroDeCobranca as erro:

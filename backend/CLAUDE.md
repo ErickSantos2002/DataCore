@@ -107,7 +107,10 @@ Certificados vêm por caminho local (`NFSE_CERT_PATH`/`NFSE_KEY_PATH`) ou por ba
   `sub` (e-mail) vira o usuário de `auth.usuarios` e vale o que o login dele valeria.
   Só é aceito em **GET** das rotas de `ROTAS_DO_AGENTE` (`core/security.py`, lista
   fechada, espelho de `app/datacore_consultas.py` do HS.OS); fora dela, 403 — rota nova
-  nasce fechada.
+  nasce fechada. A lista é a chave de `QUEM_PASSA_NAS_ROTAS_DO_AGENTE` (papéis de cada
+  rota), de onde sai `GET /agente/capacidades` (só token de agente; login → 404), que
+  diz ao HS.OS o que aquele login alcança. Rota nova no agente declara quem passa;
+  `tests/test_agente_capacidades.py` confere a tabela contra as rotas.
 - **Papéis no backend** (`core/security.py`: `COMERCIAL`, `SERVICOS`, `FINANCEIRO`,
   `DIRETORIA`) espelham `frontend/src/auth/permissoes.ts` nas rotas que o agente lê —
   valem para login e agente. `DIRETORIA` é por **id** (1, 3, 4), não por papel, de

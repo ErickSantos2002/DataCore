@@ -151,7 +151,8 @@ def _concreto(caminho):
     return re.sub(r"\{[^}]+\}", "1", caminho)
 
 
-@pytest.mark.parametrize("rota", sorted(ROTAS_DO_AGENTE))
+# /agente/capacidades não vai ao banco (a pessoa já veio): tem testes próprios.
+@pytest.mark.parametrize("rota", sorted(ROTAS_DO_AGENTE - {"/agente/capacidades"}))
 def test_toda_rota_da_lista_aceita_o_agente(client, nicholson, banco_que_acusa, flag, rota):
     with pytest.raises(Chegou):
         client.get(_concreto(rota), headers=token())
@@ -174,7 +175,7 @@ def test_comum_ve_pelo_agente_o_que_ve_pelo_login(client, joao_logado):
 
 
 # O que cada papel abre entre as ROTAS_DO_AGENTE — o espelho do permissoes.ts.
-LIVRES = {"/estoque/", "/estoque/{estoque_id}", "/faturamento/mensal"}
+LIVRES = {"/estoque/", "/estoque/{estoque_id}", "/faturamento/mensal", "/agente/capacidades"}
 COMERCIAL = {"/faturamento/resumo", "/faturamento/filtros", "/faturamento/vendas",
              "/faturamento/vendas/{id_nota}/observacoes",
              "/clientes/", "/clientes/{id}"}  # liberadas ao vendas em 12/11 (Guardi do SDR)
@@ -215,7 +216,8 @@ def pessoas(criar_usuario, login, engine):
 @pytest.mark.parametrize("papel", list(ABRE))
 def test_cada_papel_abre_pelo_agente_o_mesmo_que_pelo_login(client, pessoas, banco_que_acusa, papel):
     pelo_login, pelo_agente = pessoas[papel]
-    for rota in sorted(ROTAS_DO_AGENTE - DIRETORIA - {r for r in ROTAS_DO_AGENTE if r.startswith("/inadimplencia")}):
+    for rota in sorted(ROTAS_DO_AGENTE - DIRETORIA - {"/agente/capacidades"}
+                       - {r for r in ROTAS_DO_AGENTE if r.startswith("/inadimplencia")}):
         esperado = "passou" if rota in ABRE[papel] else 403
         assert _resultado(client, rota, pelo_login) == esperado, (papel, rota, "login")
         assert _resultado(client, rota, pelo_agente) == esperado, (papel, rota, "agente")

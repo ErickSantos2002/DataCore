@@ -102,6 +102,8 @@ app.include_router(endpoints.faturamento, dependencies=PROTEGIDO)
 app.include_router(endpoints.comercial, dependencies=PROTEGIDO)
 # Notas de entrada: aba do Gerenciamento Financeiro (CFOP do item 1/2/3).
 app.include_router(endpoints.nota_entrada, dependencies=PROTEGIDO)
+# O que o Guardi alcança com o login da pessoa (tela "Capacidade" do HS.OS).
+app.include_router(endpoints.agente, dependencies=PROTEGIDO)
 
 # Health check
 @app.get("/")
