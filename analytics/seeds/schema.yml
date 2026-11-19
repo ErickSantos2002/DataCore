@@ -71,3 +71,49 @@ seeds:
                 values: ['sim', 'nao']
       - name: motivo
         data_tests: [not_null]
+
+  # ------------------------------------------------------------- CMV (custo da mercadoria)
+  - name: produto_centro_custo
+    description: >
+      Produto da `dim_produto` → chave da aba Centro de Custo (`tiny.centro_custo_config.produto`),
+      de onde sai o custo unitário do CMV. Casa por `id_produto`, nunca por texto: o nome do
+      produto muda nas notas (o Mark X Plus virou "Mark X" em 2026) e a aba guarda nome livre.
+      Linha com `chave_centro_custo` vazia é decisão de NÃO ligar (outro modelo, kit,
+      acessório) — está aqui para o teste `produto_com_cara_de_carro_chefe_fora_do_mapa`
+      saber que alguém olhou. `nome` é só para leitura humana; quem casa é o id.
+    config:
+      column_types:
+        id_produto: varchar
+        nome: varchar
+        chave_centro_custo: varchar
+        motivo: varchar
+    columns:
+      - name: id_produto
+        data_tests: [unique, not_null]
+      - name: motivo
+        data_tests: [not_null]
+
+  - name: componente_custo_direto
+    description: >
+      O que, dos `custos_diretos` da aba Centro de Custo, entra no CMV. Chave = a descrição
+      do componente normalizada (minúsculo, sem acento, sem espaço nas pontas). Regra: entra
+      o que só vira custo pelo CMV — o aparelho, cuja compra é importação (abaixo da linha).
+      Fica fora o que já é despesa operacional no contas a pagar (frete de entrega, gás,
+      Infotech, embalagem): somar contaria duas vezes. Componente novo na aba sem linha aqui
+      para o build (`componente_de_custo_direto_sem_classificacao`).
+    config:
+      column_types:
+        componente: varchar
+        entra_no_cmv: varchar
+        motivo: varchar
+    columns:
+      - name: componente
+        data_tests: [unique, not_null]
+      - name: entra_no_cmv
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['sim', 'nao']
+      - name: motivo
+        data_tests: [not_null]

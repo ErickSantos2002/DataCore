@@ -39,11 +39,14 @@
     `GET /faturamento/mensal` soma para o painel. O que é venda quem decide é a silver.
   - **Despesa** = `fato_contas_pagar`, com a linha do DRE dada pelo seed `categoria_dre`
     e pelas exceções.
+  - **CMV** = `fato_vendas.cmv` por `data_venda` — a regra (fonte do custo, ano sem
+    configuração) está no cabeçalho do `fato_vendas`.
 
   ## A ordem do DRE
 
       receita bruta (vendas + serviços)
     − impostos sobre venda                        → receita líquida
+    − CMV (custo da mercadoria vendida)           → lucro bruto
     − despesas operacionais, por grupo            → resultado operacional
     − financeiro (tarifas)
     − impostos sobre lucro                        → resultado
@@ -57,6 +60,23 @@
   que sobra depois de pagar o banco. ⚠️ Juros: o Tiny lança a parcela inteira (principal +
   juros) numa conta só; não há como separar aqui, e `despesa_financeira` só tem o que foi
   lançado como tarifa. A parcela inteira está em `amortizacao_de_divida`.
+
+  ## CMV (2026-11-19)
+
+  Até aqui a venda do aparelho entrava inteira na receita e a compra dele ficava abaixo da
+  linha, como importação: o `resultado` era "antes do custo da mercadoria". Agora o CMV
+  desconta o custo do que SAIU no mês, e a **importação continua abaixo da linha** — ela é
+  compra de estoque; descontar as duas contaria o aparelho duas vezes.
+
+  - `cmv` só tem os itens com custo. `receita_produto_sem_custo` é a receita de venda dos
+    itens sem custo nenhum, e `cobertura_cmv_pct` = receita de produto com custo ÷ receita
+    de produto (0–100; nulo sem venda). Cobertura abaixo de 100 = `lucro_bruto` superestimado
+    na proporção dessa receita — quem lê tem que dizer.
+  - `cmv_de_outro_ano`: parte do CMV calculada com o custo do último ano configurado no
+    Centro de Custo, porque o ano da venda não tem configuração. Diferente de zero = o mês
+    usa custo emprestado de outro ano.
+  - Serviço (calibração) não tem CMV: não há mercadoria. Peça consumida na calibração,
+    se houver, não está aqui (pendência).
 
   ⚠️ **Só tem despesa o que está no contas a pagar.** Não há receita financeira, e o grupo
   1 é pessoal parcial (encargos e retenções que o Tiny não registra ficam de fora).
@@ -102,7 +122,14 @@ balancete as (
 
 vendas as (
 
-    select date_trunc('month', data_venda)::date as mes, sum(valor_nota_rateado) as valor
+    select
+        date_trunc('month', data_venda)::date                                  as mes,
+        sum(valor_nota_rateado)                                                as valor,
+        coalesce(sum(cmv), 0)                                                  as cmv,
+        coalesce(sum(cmv) filter (where fonte_custo = 'centro_custo_de_outro_ano'), 0)
+                                                                               as cmv_de_outro_ano,
+        coalesce(sum(valor_nota_rateado) filter (where fonte_custo = 'sem_custo'), 0)
+                                                                               as receita_sem_custo
     from {{ ref('fato_vendas') }}
     group by 1
 
@@ -203,6 +230,9 @@ montado as (
         coalesce(s.valor, 0)                                            as receita_servicos,
         coalesce(v.valor, 0) + coalesce(s.valor, 0)                     as receita_bruta,
         coalesce(d.impostos_sobre_venda, 0)                             as impostos_sobre_venda,
+        coalesce(v.cmv, 0)                                              as cmv,
+        coalesce(v.cmv_de_outro_ano, 0)                                 as cmv_de_outro_ano,
+        coalesce(v.receita_sem_custo, 0)                                as receita_produto_sem_custo,
 
         coalesce(d.despesa_grupo_1_equipe, 0)                           as despesa_grupo_1_equipe,
         coalesce(d.despesa_grupo_2_sede, 0)                             as despesa_grupo_2_sede,
@@ -252,6 +282,15 @@ select
     impostos_sobre_venda,
     receita_bruta - impostos_sobre_venda                                as receita_liquida,
 
+    cmv,
+    receita_bruta - impostos_sobre_venda - cmv                          as lucro_bruto,
+    receita_produto_sem_custo,
+    case
+        when receita_vendas <> 0
+            then round(100 * (receita_vendas - receita_produto_sem_custo) / receita_vendas, 2)
+    end                                                                 as cobertura_cmv_pct,
+    cmv_de_outro_ano,
+
     despesa_grupo_1_equipe,
     despesa_grupo_2_sede,
     despesa_grupo_3_servicos_de_apoio,
@@ -262,16 +301,16 @@ select
     despesa_grupo_10_outros,
     despesa_sem_categoria,
     despesa_operacional,
-    receita_bruta - impostos_sobre_venda - despesa_operacional          as resultado_operacional,
+    receita_bruta - impostos_sobre_venda - cmv - despesa_operacional    as resultado_operacional,
 
     despesa_financeira,
     impostos_sobre_lucro,
-    receita_bruta - impostos_sobre_venda - despesa_operacional
+    receita_bruta - impostos_sobre_venda - cmv - despesa_operacional
         - despesa_financeira - impostos_sobre_lucro                     as resultado,
 
     -- dívida: fora do resultado (principal não é despesa), mas é saída de caixa
     amortizacao_de_divida,
-    receita_bruta - impostos_sobre_venda - despesa_operacional
+    receita_bruta - impostos_sobre_venda - cmv - despesa_operacional
         - despesa_financeira - impostos_sobre_lucro - amortizacao_de_divida
                                                                         as resultado_apos_divida,
 

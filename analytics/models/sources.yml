@@ -294,8 +294,9 @@ sources:
       - name: centro_custo_config
         description: >
           Configuração de centro de custo por produto e ano.
-          ⚠️ `produto` é NOME LIVRE, não código — casa por texto, o que é
-          frágil. Candidato a virar seed (item 4.9).
+          ⚠️ `produto` é NOME LIVRE, não código. Desde 2026-11-19 é a fonte do
+          custo unitário do CMV (`stg_centro_custo`); quem liga produto a nome é o seed
+          `produto_centro_custo`, por id — nunca casando texto de produto.
         columns:
           - name: id
             data_tests: [unique, not_null]

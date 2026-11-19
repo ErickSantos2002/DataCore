@@ -243,6 +243,22 @@ models:
           - accepted_values:
               arguments:
                 values: ['interno', 'externo']
+      - name: fonte_custo
+        description: >
+          De onde veio o `custo_unitario`: `centro_custo` (aba, ano da venda),
+          `centro_custo_de_outro_ano` (aba, último ano configurado — ver `ano_custo`),
+          `cadastro` (`dim_produto`) ou `sem_custo` (`cmv` nulo). Regra no cabeçalho.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['centro_custo', 'centro_custo_de_outro_ano', 'cadastro', 'sem_custo']
+      - name: cmv
+        description: >
+          `quantidade` × `custo_unitario`. Nulo = sem custo (não é zero). Só aduaneiro + o
+          aparelho para os carros-chefe: overhead e frete/gás/embalagem já são despesa.
+      - name: ano_custo
+        description: Ano da configuração do Centro de Custo usada; nulo fora do Centro de Custo.
 
   - name: fato_contas_receber
     description: >
@@ -530,13 +546,34 @@ models:
           Houve venda, serviço ou conta emitida no mês. `false` = mês futuro só com parcelas
           agendadas — não é "o resultado do mês" de ninguém ainda.
         data_tests: [not_null]
+      - name: cmv
+        description: >
+          Custo da mercadoria vendida no mês (`fato_vendas.cmv` por `data_venda`). Só itens
+          com custo: o resto está em `receita_produto_sem_custo`. A importação continua
+          abaixo da linha — é compra de estoque.
+        data_tests: [not_null]
+      - name: lucro_bruto
+        description: "`receita_liquida` − `cmv`."
+        data_tests: [not_null]
+      - name: receita_produto_sem_custo
+        description: Receita de venda dos itens sem custo nenhum (nem Centro de Custo, nem cadastro).
+        data_tests: [not_null]
+      - name: cobertura_cmv_pct
+        description: >
+          Receita de produto com custo ÷ receita de produto, de 0 a 100. Nulo sem venda.
+          Abaixo de 100 = `lucro_bruto` superestimado.
+      - name: cmv_de_outro_ano
+        description: >
+          Parte do `cmv` com custo do último ano configurado no Centro de Custo, porque o
+          ano da venda não tem configuração. Diferente de zero = custo emprestado, dizer.
+        data_tests: [not_null]
       - name: resultado
         description: >
-          Receita bruta − impostos sobre venda − despesa operacional − financeiro − impostos
-          sobre lucro. SEM a dívida: amortização de principal não é despesa.
+          Lucro bruto − despesa operacional − financeiro − impostos sobre lucro. Desde
+          2026-11-19 desconta o CMV. SEM a dívida: amortização de principal não é despesa.
         data_tests: [not_null]
       - name: resultado_apos_divida
-        description: "`resultado` − `amortizacao_de_divida`: o que sobra depois de pagar o banco."
+        description: "`resultado` − `amortizacao_de_divida`: o que sobra depois de pagar o banco (com o CMV descontado)."
         data_tests: [not_null]
       - name: balancete_sem_impostos
         description: >

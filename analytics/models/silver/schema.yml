@@ -290,3 +290,22 @@ models:
           - accepted_values:
               arguments:
                 values: ['aberto', 'quitado', 'cancelada']
+
+  - name: stg_centro_custo
+    description: >
+      Custo unitário por produto e ano da aba Centro de Custo, na conta do `calcularCusto`
+      da tela SEM o overhead. `custo_cmv_unitario` = aduaneiro rateado + só os componentes
+      que o seed `componente_custo_direto` põe no CMV; `custo_unitario_tela` = aduaneiro +
+      todos os diretos, para conferir com a aba. ⚠️ `configurado = false` (conta zerada ou
+      vazia) é ano sem configuração, nunca custo zero.
+    columns:
+      - name: id_config
+        data_tests: [unique, not_null]
+      - name: configurado
+        data_tests: [not_null]
+
+  - name: stg_centro_custo_componentes
+    description: >
+      Os `custos_diretos` da aba (já por unidade), um por linha, com `entra_no_cmv` do seed
+      `componente_custo_direto`. Nulo = componente sem classificação, e
+      `componente_de_custo_direto_sem_classificacao` para o build.
