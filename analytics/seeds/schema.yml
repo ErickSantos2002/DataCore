@@ -130,3 +130,49 @@ seeds:
                 values: ['sim', 'nao']
       - name: motivo
         data_tests: [not_null]
+
+  # ------------------------------------------------------------- linha de negócio
+  - name: linha_produto
+    description: >
+      Produto vendido → linha de negócio: `aparelho` (bafômetro, etilômetro, drogômetro e os
+      kits com aparelho), `consumivel` (bocal, bobina, protetor, bafômetro descartável, kit
+      de testagem) ou `acessorio` (peça, cabo, placa, suporte, impressora avulsa…). Por
+      `id_produto`, decidido produto a produto: "bafômetro" no nome não quer dizer aparelho
+      ("bocal ativo - bafometro mark x"). Produto vendido fora daqui para o build
+      (`produto_vendido_sem_linha`). `nome` é só para leitura.
+    config:
+      column_types:
+        id_produto: varchar
+        nome: varchar
+        linha: varchar
+    columns:
+      - name: id_produto
+        data_tests: [unique, not_null]
+      - name: linha
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['aparelho', 'consumivel', 'acessorio']
+
+  - name: linha_servico_excecao
+    description: >
+      NFS-e cuja linha a regra (discriminação, depois código de atividade) não acerta, por
+      número + data de emissão (a numeração recomeçou no ADN). Toda nota de 2025 em diante
+      que cai em `outro` precisa estar aqui, com o motivo (`servico_em_outro_sem_justificativa`).
+    config:
+      column_types:
+        numero_nfse: varchar
+        data_servico: date
+        linha: varchar
+        motivo: varchar
+    columns:
+      - name: linha
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['calibracao', 'plataforma', 'locacao', 'servico_tecnico', 'outro']
+      - name: motivo
+        data_tests: [not_null]
+

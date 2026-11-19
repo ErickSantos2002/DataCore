@@ -1,0 +1,7 @@
+numero_nfse,data_servico,linha,motivo
+4174,2025-05-27,outro,"Producao de bocais faturada por unidade (quantidade x preco unitario de centavos), com codigo de calibracao. Nao e calibracao: e venda de consumivel por NFS-e, sem item de produto."
+4893,2025-11-17,outro,"Producao de bocais faturada por unidade, com codigo de calibracao. Mesmo caso da 4174."
+5082,2026-01-30,outro,"Mao de obra mais producao de bocais por unidade, com codigo de calibracao. Mesmo caso da 4174."
+5518,2026-05-07,outro,"Complemento do fechamento de 2025 da producao de bocais (quantidade x preco unitario). Mesmo caso da 4174."
+1300,2026-10-15,outro,"Producao de bocais de jan a set/2026 faturada por unidade, com codigo 501. Mesmo caso da 4174."
+1256,2026-10-02,servico_tecnico,"Servicos de integracao: e o servico tecnico do codigo 7119799 (ajustes e integracoes), faturado com o codigo 501."

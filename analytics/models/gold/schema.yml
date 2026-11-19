@@ -259,6 +259,10 @@ models:
           aparelho para os carros-chefe: overhead e frete/gás/embalagem já são despesa.
       - name: ano_custo
         description: Ano da configuração do Centro de Custo usada; nulo fora do Centro de Custo.
+      - name: linha
+        description: >
+          Linha de negócio do produto (seed `linha_produto`): aparelho, consumivel ou
+          acessorio. Nula = produto sem linha, e `produto_vendido_sem_linha` para o build.
 
   - name: fato_contas_receber
     description: >
@@ -360,6 +364,16 @@ models:
       barramento). Nota cancelada não entra — regra já decidida na curadoria 4.9 e no
       endpoint da API.
     columns:
+      - name: linha
+        description: >
+          calibracao · plataforma · locacao · servico_tecnico · outro, pela discriminação,
+          com o código como apoio e o seed `linha_servico_excecao` por cima. Regra no
+          cabeçalho; `linha_origem` diz qual passo decidiu.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['calibracao', 'plataforma', 'locacao', 'servico_tecnico', 'outro']
       - name: sk_servico
         description: "O grão: uma linha por NFS-e não cancelada."
         data_tests: [unique, not_null]
@@ -659,3 +673,32 @@ models:
         data_tests: [not_null]
       - name: semana
         data_tests: [not_null]
+
+  - name: margem_por_linha_mensal
+    description: >
+      Receita, CMV e margem bruta por mês × linha de negócio (produto: aparelho,
+      consumivel, acessorio; serviço: calibracao, plataforma, locacao, servico_tecnico,
+      outro), para a skill `margem-por-linha` do Midas. Receita bruta, a do `dre_mensal`.
+      ⚠️ `margem_bruta_pct` é só sobre a receita COM custo (ver `cobertura_custo_pct`).
+      ⚠️ Serviço: cmv/lucro/margem nulos — sem custo direto rastreado; o custo está na
+      despesa operacional.
+    columns:
+      - name: mes
+        data_tests: [not_null]
+      - name: tipo
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['produto', 'servico']
+      - name: linha
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['aparelho', 'consumivel', 'acessorio', 'calibracao', 'plataforma',
+                         'locacao', 'servico_tecnico', 'outro']
+      - name: margem_bruta_pct
+        description: (receita com custo − cmv) ÷ receita com custo. Nulo no serviço.
+      - name: cobertura_custo_pct
+        description: Receita com custo ÷ receita. 0 no serviço.

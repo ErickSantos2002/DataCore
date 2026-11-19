@@ -34,10 +34,25 @@
   (⚠️ registrado na matriz de barramento — só existiria por ligação com a venda que
   originou o serviço, o que hoje não é rastreável).
 
-  ⚠️ **`linha de negócio` (Calibração × Plataforma × Manutenção) fica como atributo
-  degenerado**, no `codigo_atividade`, e não como dimensão. A matriz previa a dimensão, mas
-  o `fato_vendas` também não tem uma, e criá-la só aqui deixaria a régua de linha de
-  negócio existindo de um lado e não do outro. Entra quando os dois fatos a pedirem.
+  ## Linha de negócio (2026-11-19)
+
+  `linha` ∈ calibracao · plataforma · locacao · servico_tecnico · outro — atributo
+  degenerado, como a `linha` do `fato_vendas` (os dois fatos a pediram ao mesmo tempo,
+  para a margem por linha). O `codigo_atividade` NÃO separa a linha: o 501 tem calibração,
+  plataforma e locação; o 3312102 já teve produção de bocais. Quem separa é a
+  discriminação. A regra, em ordem (a primeira que casar):
+
+  1. o seed `linha_servico_excecao`, por número + data da nota;
+  2. o COMEÇO da discriminação: calibração/manutenção → `calibracao`; anuidade,
+     plataforma, desenvolvimento → `plataforma`; locação → `locacao`; serviço técnico →
+     `servico_tecnico`;
+  3. a palavra em qualquer ponto da discriminação, na mesma ordem (há notas que começam
+     pelo solicitante ou pela cidade);
+  4. o código, como apoio: 3311200/3312102 → calibracao; 62xxxxx e 119904 → plataforma;
+     6421200 → locacao; 7119799 → servico_tecnico;
+  5. senão, `outro`. Nota de 2025 em diante em `outro` sem linha no seed para o build.
+
+  `linha_origem` diz qual passo decidiu.
 #}
 
 {{ config(materialized = 'table') }}
@@ -80,6 +95,8 @@ select
     s.data_competencia,
     s.iss_retido,
     s.documento_tomador is null                                   as tomador_sem_documento,
+    l.linha,
+    l.linha_origem,
 
     -- ------------------------------------------------------------------ métricas
     -- `valor_servicos` é o faturamento. As outras vêm ao lado, cada uma na sua coluna, em
@@ -90,5 +107,40 @@ select
     s.valor_total_recebido
 
 from servicos s
+cross join lateral (
+    select
+        coalesce(x.linha, r.linha, 'outro')                                      as linha,
+        case when x.linha is not null then 'excecao' else coalesce(r.origem, 'nenhuma') end
+                                                                                 as linha_origem
+    from (select 1) um
+    left join {{ ref('linha_servico_excecao') }} x
+           on x.numero_nfse = s.numero_nfse::text and x.data_servico = s.data_emissao
+    left join lateral (
+        select
+            case
+                when d ~ '^(servicos de )?(calibracao|manutencao)'          then 'calibracao'
+                when d ~ '^(anuidade|plataforma|desenvolvimento)'           then 'plataforma'
+                when d ~ '^locacao'                                         then 'locacao'
+                when d ~ '^serv[a-z]*s? tecnico'                            then 'servico_tecnico'
+                when d ~ 'calibracao|manutencao'                            then 'calibracao'
+                when d ~ 'plataforma|platadorma'                            then 'plataforma'
+                when d ~ 'locacao'                                          then 'locacao'
+                when d ~ 'serv[a-z]*s? tecnico'                             then 'servico_tecnico'
+            end                                                             as linha_d,
+            case
+                when s.codigo_atividade::text in ('3311200', '3312102')     then 'calibracao'
+                when s.codigo_atividade::text like '62%'
+                  or s.codigo_atividade::text = '119904'                    then 'plataforma'
+                when s.codigo_atividade::text = '6421200'                   then 'locacao'
+                when s.codigo_atividade::text = '7119799'                   then 'servico_tecnico'
+            end                                                             as linha_c
+        from (select coalesce(s.discriminacao, '') as d) dd
+    ) rr on true
+    cross join lateral (
+        select coalesce(rr.linha_d, rr.linha_c) as linha,
+               case when rr.linha_d is not null then 'discriminacao'
+                    when rr.linha_c is not null then 'codigo' end as origem
+    ) r
+) l
 left join cliente   cl on cl.chave_cliente = s.documento_tomador
 left join geografia g  on g.cidade = cl.cidade and g.uf = cl.uf

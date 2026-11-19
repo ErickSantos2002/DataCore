@@ -93,6 +93,13 @@ vendedor as (
 
 ),
 
+-- linha de negócio do produto: seed por id (ver `linha_produto`)
+linha as (
+
+    select id_produto, linha from {{ ref('linha_produto') }}
+
+),
+
 -- --------------------------------------------------------------- CMV
 mapa_centro_custo as (
 
@@ -182,10 +189,14 @@ select
     cu.custo_unitario,
     v.quantidade * cu.custo_unitario                as cmv,
     cu.fonte_custo,
-    cu.ano_custo
+    cu.ano_custo,
+
+    -- linha de negócio: aparelho · consumivel · acessorio (seed `linha_produto`)
+    ln.linha
 
 from vendas v
 left join custo      cu  on cu.id_item      = v.id_item
+left join linha      ln  on ln.id_produto   = v.id_produto
 left join de_para    dp  on dp.id_cadastro  = v.id_cliente
 left join cliente    c   on c.chave_cliente = dp.chave_cliente
 left join geografia  g   on g.cidade = c.cidade and g.uf = c.uf
