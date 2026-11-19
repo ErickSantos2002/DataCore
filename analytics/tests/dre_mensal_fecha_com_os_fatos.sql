@@ -19,7 +19,8 @@ with dre as (
         mes,
         impostos_sobre_venda + despesa_operacional + despesa_financeira
           + amortizacao_de_divida + impostos_sobre_lucro
-          + importacao + dividendos + investimento              as despesa_do_dre,
+          + importacao + dividendos + investimento
+          + valor_desconsiderado                                as despesa_do_dre,
         despesa_operacional
           - (despesa_grupo_1_equipe + despesa_grupo_2_sede + despesa_grupo_3_servicos_de_apoio
              + despesa_grupo_4_gerais + despesa_grupo_5_diretoria + despesa_grupo_6_materiais

@@ -43,16 +43,23 @@ seeds:
     description: >
       Reclassificação de conta a pagar que o plano de contas põe no lugar errado, por
       fornecedor + código da categoria + padrão do histórico (ILIKE sobre o histórico
-      normalizado: minúsculo e sem acento). Muda `linha_dre` e `natureza`, NUNCA o grupo:
-      o Balancete continua somando a conta onde o Tiny a pôs. `confirmado = nao` = decisão
-      ainda sem o Financeiro; o fato carrega isso em `reclassificacao_confirmada`.
+      normalizado: minúsculo e sem acento; histórico vazio casa com '%') e, se preenchido,
+      `id_tiny` (para exceção de uma conta só). Muda `linha_dre` e `natureza` e, se
+      preenchidos, o grupo DO DRE (`grupo_dre`) e o mês (`mes_dre = apuracao`: o mês
+      "Apuração MM/AAAA" do histórico). NUNCA o `grupo_balancete`: o Balancete continua
+      somando a conta onde o Tiny a pôs. `natureza = desconsiderada` tira a conta do DRE e
+      do caixa (não do Balancete). `confirmado = nao` = decisão ainda sem o Financeiro; o
+      fato carrega isso em `reclassificacao_confirmada`.
     config:
       column_types:
         fornecedor: varchar
         categoria_codigo: varchar
         padrao_historico: varchar
+        id_tiny: varchar
         linha_dre: varchar
         natureza: varchar
+        grupo_dre: varchar
+        mes_dre: varchar
         confirmado: varchar
         motivo: varchar
     columns:
@@ -62,7 +69,13 @@ seeds:
           - accepted_values:
               arguments:
                 values: ['operacional', 'imposto_venda', 'imposto_lucro', 'financeiro',
-                         'divida', 'dividendo', 'importacao', 'investimento']
+                         'divida', 'dividendo', 'importacao', 'investimento', 'desconsiderada']
+      - name: mes_dre
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['padrao', 'apuracao']
       - name: confirmado
         data_tests:
           - not_null

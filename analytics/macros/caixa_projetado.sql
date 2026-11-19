@@ -246,13 +246,15 @@ pagar as (
             when f.natureza = 'importacao'        then 'importacao'
             else 'recorrente'
         end                                                        as tipo_saida,
-        -- a fatura do cartão (9.1) só existe no Tiny desde set/2026: ritmo próprio, para
-        -- a falta de histórico dela não diluir a do grupo 9 (tarifas)
-        case when f.categoria_codigo = '9.1' then '9.1' else f.grupo_balancete end
+        -- a fatura do cartão tem ritmo próprio (é mensal e grande, e o grupo 9 é de
+        -- tarifas miúdas); `fatura_cartao` inclui a paga por boleto no Santander
+        case when f.fatura_cartao then '9.1' else f.grupo_dre end
                                                                    as chave_ritmo
     from {{ ref('fato_contas_pagar') }} f
     join {{ ref('stg_contas_pagar') }} s on s.id = f.sk_conta
     where not f.cancelada
+      -- conta que o Financeiro mandou esquecer (seed de exceções) não sai do caixa
+      and f.natureza <> 'desconsiderada'
 
 ),
 

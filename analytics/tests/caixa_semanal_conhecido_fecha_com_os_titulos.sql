@@ -5,8 +5,8 @@
   - `entrada_a_vencer` = saldo do a receber em aberto (`aberto`/`pendente`, sem excluídas)
     que vence na semana, com o vencimento movido para o próximo dia útil;
   - `saida_parcelas + saida_a_pagar_em_aberto + saida_importacao` = saldo do a pagar em
-    aberto (fora excluídas e canceladas) da semana; o vencido em aberto conta na semana
-    corrente.
+    aberto (fora excluídas, canceladas e as desconsideradas pelo seed de exceções) da
+    semana; o vencido em aberto conta na semana corrente.
 
   Liquidado hoje conta como em aberto pelo valor, como no macro: a semana corrente começa
   hoje. Título fora do horizonte (além da semana 12) não entra em nenhum dos dois lados.
@@ -51,6 +51,7 @@ pagar as (
     where (lower(p.situacao) in ('aberto', 'pendente', 'parcial') and p.liquidacao is null
            or p.liquidacao >= current_date and lower(p.situacao) <> 'cancelada')
       and p.excluida_na_origem_em is null
+      and p.id not in (select sk_conta from {{ ref('fato_contas_pagar') }} where natureza = 'desconsiderada')
     group by 1
 
 )

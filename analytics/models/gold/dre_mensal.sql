@@ -78,8 +78,13 @@
   - Serviço (calibração) não tem CMV: não há mercadoria. Peça consumida na calibração,
     se houver, não está aqui (pendência).
 
-  ⚠️ **Só tem despesa o que está no contas a pagar.** Não há receita financeira, e o grupo
-  1 é pessoal parcial (encargos e retenções que o Tiny não registra ficam de fora).
+  ⚠️ **Só tem despesa o que está no contas a pagar.** Não há receita financeira. O grupo
+  1 tem, desde 2026-11-19, a guia da DCTFWeb (INSS + IRRF da folha) que o Tiny põe em 8.4
+  (`encargos_da_folha`), no mês da apuração; a folha de cada mês é lançada até o dia 15
+  do seguinte, então o mês corrente e o anterior têm o grupo 1 incompleto.
+
+  **Grupo do DRE ≠ grupo do Balancete.** As colunas `despesa_grupo_*` somam por
+  `grupo_dre` (o do Balancete, salvo exceção); as `balancete_*`, por `grupo_balancete`.
 
   ## Conta cancelada
 
@@ -89,13 +94,15 @@
 
   ## Qualidade, não "provisório"
 
-  `tem_fatura_cartao`: a fatura do cartão (9.1) só aparece no Tiny a partir de set/2026,
-  e mês sem ela tem despesa subestimada. É fato do mês, determinístico. "Provisório"
+  `tem_fatura_cartao`: houve fatura do cartão no mês — em 9.1, ou, de mar/2025 a set/2026,
+  paga por boleto no Santander e lançada como tarifa (9.3), que a exceção reclassifica
+  para o cartão (corrigido em 2026-11-19: antes disso esses meses pareciam sem fatura, e a
+  despesa estava na linha errada, não faltando). Mês sem fatura tem despesa subestimada. É fato do mês, determinístico. "Provisório"
   (mês corrente e o anterior crescem com o lançamento retroativo) depende de hoje e é dito
   na consulta, nunca guardado aqui.
 
   `valor_reclassificado_nao_confirmado`: quanto do mês está numa linha por exceção que o
-  Financeiro ainda não confirmou (hoje, as parcelas do Itaú). Diferente de zero = o DRE
+  Financeiro ainda não confirmou (desde 2026-11-19, nenhuma: o Itaú foi confirmado). Diferente de zero = o DRE
   do mês depende dessa decisão, e quem lê tem que dizer isso.
 #}
 
@@ -186,16 +193,17 @@ despesa as (
         -- ------------------------------------------------- DRE (sem as canceladas)
         sum(valor) filter (where not cancelada and natureza = 'imposto_venda')  as impostos_sobre_venda,
 
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '1')   as despesa_grupo_1_equipe,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '2')   as despesa_grupo_2_sede,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '3')   as despesa_grupo_3_servicos_de_apoio,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '4')   as despesa_grupo_4_gerais,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '5')   as despesa_grupo_5_diretoria,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '6')   as despesa_grupo_6_materiais,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '9')   as despesa_grupo_9_cartoes,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = '10')  as despesa_grupo_10_outros,
-        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_balancete = 'sem') as despesa_sem_categoria,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '1')   as despesa_grupo_1_equipe,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '2')   as despesa_grupo_2_sede,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '3')   as despesa_grupo_3_servicos_de_apoio,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '4')   as despesa_grupo_4_gerais,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '5')   as despesa_grupo_5_diretoria,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '6')   as despesa_grupo_6_materiais,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '9')   as despesa_grupo_9_cartoes,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = '10')  as despesa_grupo_10_outros,
+        sum(valor) filter (where not cancelada and natureza = 'operacional' and grupo_dre = 'sem') as despesa_sem_categoria,
         sum(valor) filter (where not cancelada and natureza = 'operacional')                             as despesa_operacional,
+        sum(valor) filter (where not cancelada and linha_dre = 'encargos_da_folha')                     as encargos_da_folha,
 
         sum(valor) filter (where not cancelada and natureza = 'financeiro')     as despesa_financeira,
         sum(valor) filter (where not cancelada and natureza = 'divida')         as amortizacao_de_divida,
@@ -204,9 +212,10 @@ despesa as (
         sum(valor) filter (where not cancelada and natureza = 'importacao')     as importacao,
         sum(valor) filter (where not cancelada and natureza = 'dividendo')      as dividendos,
         sum(valor) filter (where not cancelada and natureza = 'investimento')   as investimento,
+        sum(valor) filter (where not cancelada and natureza = 'desconsiderada') as valor_desconsiderado,
 
         -- ------------------------------------------------- qualidade
-        count(*) filter (where categoria_codigo = '9.1' and not cancelada) > 0  as tem_fatura_cartao,
+        count(*) filter (where fatura_cartao and not cancelada) > 0             as tem_fatura_cartao,
         sum(valor) filter (where not cancelada and reclassificada and not reclassificacao_confirmada)
                                                                                 as valor_reclassificado_nao_confirmado,
         count(*)                                                                as qtd_contas,
@@ -244,6 +253,7 @@ montado as (
         coalesce(d.despesa_grupo_10_outros, 0)                          as despesa_grupo_10_outros,
         coalesce(d.despesa_sem_categoria, 0)                            as despesa_sem_categoria,
         coalesce(d.despesa_operacional, 0)                              as despesa_operacional,
+        coalesce(d.encargos_da_folha, 0)                                as encargos_da_folha,
 
         coalesce(d.despesa_financeira, 0)                               as despesa_financeira,
         coalesce(d.amortizacao_de_divida, 0)                            as amortizacao_de_divida,
@@ -252,6 +262,7 @@ montado as (
         coalesce(d.importacao, 0)                                       as importacao,
         coalesce(d.dividendos, 0)                                       as dividendos,
         coalesce(d.investimento, 0)                                     as investimento,
+        coalesce(d.valor_desconsiderado, 0)                             as valor_desconsiderado,
 
         coalesce(d.tem_fatura_cartao, false)                            as tem_fatura_cartao,
         coalesce(d.valor_reclassificado_nao_confirmado, 0)              as valor_reclassificado_nao_confirmado,
@@ -301,6 +312,8 @@ select
     despesa_grupo_10_outros,
     despesa_sem_categoria,
     despesa_operacional,
+    -- dentro do grupo 1: a guia da DCTFWeb (INSS + IRRF da folha)
+    encargos_da_folha,
     receita_bruta - impostos_sobre_venda - cmv - despesa_operacional    as resultado_operacional,
 
     despesa_financeira,
@@ -318,6 +331,9 @@ select
     importacao,
     dividendos,
     investimento,
+
+    -- fora do DRE por decisão do Financeiro (seed de exceções); está no Balancete
+    valor_desconsiderado,
 
     -- qualidade
     mes_lancado,

@@ -502,14 +502,24 @@ models:
           - accepted_values:
               arguments:
                 values: ['operacional', 'imposto_venda', 'imposto_lucro', 'financeiro',
-                         'divida', 'dividendo', 'importacao', 'investimento']
+                         'divida', 'dividendo', 'importacao', 'investimento', 'desconsiderada']
+      - name: grupo_dre
+        description: >
+          O grupo em que o `dre_mensal` soma a conta: o `grupo_balancete`, salvo exceção
+          com `grupo_dre` no seed (a guia da DCTFWeb, do 8 para o 1).
+        data_tests: [not_null]
+      - name: fatura_cartao
+        description: >
+          Fatura do cartão: o código 9.1, ou a reclassificada para `cartao` (paga por
+          boleto no Santander em 9.3, mar/2025 a set/2026). É o que `tem_fatura_cartao` lê.
+        data_tests: [not_null]
       - name: reclassificada
         description: A linha veio de `excecoes_contas_pagar`, não do plano de contas.
         data_tests: [not_null]
       - name: reclassificacao_confirmada
         description: >
-          `false` = reclassificação ainda sem o Financeiro (hoje: parcelas do Itaú como
-          dívida). NULL quando a conta não foi reclassificada.
+          `false` = reclassificação ainda sem o Financeiro (em 2026-11-19, nenhuma: as
+          quatro exceções foram confirmadas). NULL quando a conta não foi reclassificada.
       - name: estado
         data_tests:
           - accepted_values:
@@ -523,7 +533,9 @@ models:
       VENCIMENTO (`fato_contas_pagar.mes_dre`).
       Receita = `fato_vendas` + `fato_servicos`, as réguas do painel. `balancete_*` existem
       para conferência e reproduzem a tela como ela é. ⚠️ `tem_fatura_cartao = false` =
-      despesa subestimada (a fatura só entra no Tiny a partir de set/2026).
+      despesa subestimada (fatura em 9.1, ou paga por boleto no Santander em 9.3 de mar/2025 a
+      set/2026, reclassificada). ⚠️ `despesa_grupo_*` soma por `grupo_dre` (a guia da
+      DCTFWeb vai do 8 para o 1); `balancete_*`, por `grupo_balancete`.
       ⚠️ `valor_reclassificado_nao_confirmado` > 0 = o mês depende de decisão do Financeiro.
       ⚠️ "Provisório" (mês corrente e anterior) NÃO está aqui: depende de hoje, é dito na
       consulta. ⚠️ Dívida (amortização) fica FORA do `resultado` (principal não é despesa);

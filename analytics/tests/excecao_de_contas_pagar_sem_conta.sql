@@ -18,5 +18,6 @@ where not exists (
     from {{ ref('stg_contas_pagar') }} c
     where c.fornecedor_nome_normalizado = {{ normalizar_texto('e.fornecedor') }}
       and c.categoria_codigo = e.categoria_codigo
-      and c.historico_normalizado ilike e.padrao_historico
+      and coalesce(c.historico_normalizado, '') ilike e.padrao_historico
+      and (nullif(btrim(e.id_tiny), '') is null or nullif(btrim(e.id_tiny), '')::bigint = c.id_tiny)
 )

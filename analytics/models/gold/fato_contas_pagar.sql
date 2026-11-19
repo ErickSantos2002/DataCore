@@ -61,10 +61,23 @@
   ## Linha do DRE: plano de contas, depois exceção
 
   `categoria_dre` dá a linha pelo código da categoria; `excecoes_contas_pagar` sobrescreve
-  quando fornecedor + código + histórico batem (hoje: as parcelas do Itaú em 9.3, que são
-  dívida e não tarifa — **ainda sem confirmação do Financeiro**). A exceção muda
+  quando fornecedor + código + histórico batem (as parcelas do Itaú em 9.3, que são dívida e
+  não tarifa; a fatura do cartão paga por boleto no Santander, também em 9.3; a guia da
+  DCTFWeb em 8.4 — todas confirmadas pelo Financeiro em 2026-11-19). A exceção muda
   `linha_dre` e `natureza`, nunca `grupo_balancete`: o Balancete soma a conta onde o Tiny
   a pôs, e é isso que deixa as âncoras por grupo conferíveis.
+
+  Desde 2026-11-19 a exceção pode também (colunas vazias = não muda):
+  - **`grupo_dre`**: o grupo em que o DRE soma a conta. A guia da DCTFWeb (INSS + IRRF da
+    folha) está em 8.4 no Tiny e no Balancete, mas é pessoal: no DRE vai para o grupo 1.
+    `grupo_balancete` não muda, e as colunas `balancete_*` e a âncora por grupo continuam
+    batendo com a tela.
+  - **`mes_dre = apuracao`**: o mês do DRE é o "Apuração MM/AAAA" do histórico, e não a
+    emissão. A guia de outubro paga a folha de setembro, e é em setembro que ela é custo.
+    Histórico sem o MM/AAAA (a guia do 13º) fica na emissão.
+  - **`natureza = desconsiderada`**: a conta sai do DRE e do caixa projetado (conta que o
+    Financeiro mandou esquecer). Fica no fato e no Balancete, que reproduz a tela.
+  - **`id_tiny`**: a exceção vale só para aquela conta.
 
   ⚠️ Duas exceções casando a mesma conta multiplicariam a linha. Não há desempate aqui de
   propósito: `fato_contas_pagar_reconcilia_com_a_silver` derruba o build, e a exceção
@@ -104,8 +117,11 @@ excecoes as (
         {{ normalizar_texto('fornecedor') }}    as fornecedor_normalizado,
         categoria_codigo,
         padrao_historico,
+        nullif(btrim(id_tiny), '')::bigint      as id_tiny,
         linha_dre,
         natureza,
+        nullif(btrim(grupo_dre), '')            as grupo_dre,
+        mes_dre,
         confirmado = 'sim'                      as confirmado,
         motivo
     from {{ ref('excecoes_contas_pagar') }}
@@ -123,9 +139,10 @@ select
     c.competencia                               as data_competencia,
     c.liquidacao                                as data_liquidacao,
 
-    -- o mês do DRE — ver "Parcelamento" no cabeçalho
+    -- o mês do DRE — ver "Parcelamento" e "O mês da apuração" no cabeçalho
     case
         when parcela.de_parcelamento then date_trunc('month', c.vencimento)
+        when e.mes_dre = 'apuracao' and apuracao.mes is not null then apuracao.mes
         else date_trunc('month', c.data_emissao)
     end::date                                   as mes_dre,
     parcela.de_parcelamento                     as parcela_de_parcelamento,
@@ -134,6 +151,8 @@ select
     c.categoria,
     c.categoria_codigo,
     c.grupo_balancete,
+    -- o grupo em que o DRE soma a conta: o do Balancete, salvo exceção (ver cabeçalho)
+    coalesce(e.grupo_dre, c.grupo_balancete)    as grupo_dre,
     p.rotulo                                    as categoria_rotulo,
     coalesce(e.linha_dre, p.linha_dre)          as linha_dre,
     coalesce(e.natureza, p.natureza)            as natureza,
@@ -142,6 +161,10 @@ select
     -- NULL quando não houve reclassificação: "confirmada" só tem sentido se houve
     e.confirmado                                as reclassificacao_confirmada,
     e.motivo                                    as motivo_reclassificacao,
+    -- a fatura do cartão: o código 9.1, ou a fatura lançada em outro código e
+    -- reclassificada (antes de out/2026 ela vinha como tarifa do Santander)
+    c.categoria_codigo = '9.1' or coalesce(e.linha_dre = 'cartao', false)
+                                                as fatura_cartao,
 
     c.fornecedor_nome,
     c.documento_fornecedor,
@@ -171,10 +194,15 @@ left join plano p
 left join excecoes e
        on e.fornecedor_normalizado = c.fornecedor_nome_normalizado
       and e.categoria_codigo       = c.categoria_codigo
-      and c.historico_normalizado ilike e.padrao_historico
+      and coalesce(c.historico_normalizado, '') ilike e.padrao_historico
+      and (e.id_tiny is null or e.id_tiny = c.id_tiny)
 join lotes l
   on l.id = c.id
 cross join lateral (
     select coalesce(e.natureza, p.natureza) in ('divida', 'imposto_venda', 'imposto_lucro')
            and l.lote_de_parcelas               as de_parcelamento
 ) parcela
+-- "Apuração MM/AAAA" no histórico: o mês a que a guia se refere
+cross join lateral (
+    select to_date(substring(c.historico_normalizado from 'apuracao:?\s*(\d{2}/\d{4})'), 'MM/YYYY') as mes
+) apuracao
