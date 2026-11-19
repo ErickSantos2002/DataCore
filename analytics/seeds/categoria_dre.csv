@@ -1,0 +1,80 @@
+categoria_codigo,rotulo,grupo,linha_dre,natureza,observacao
+1.1,Vale Transporte,1,pessoal,operacional,
+1.2,Vale Alimentacao,1,pessoal,operacional,
+1.3,Salario,1,pessoal,operacional,
+1.4,Ferias,1,pessoal,operacional,
+1.5,Rescisao,1,pessoal,operacional,
+1.6,FGTS,1,pessoal,operacional,
+1.7,INSS,1,pessoal,operacional,
+1.8,Gratificacoes,1,pessoal,operacional,
+1.9,13o Salario,1,pessoal,operacional,
+1.9.1,Confraternizacoes Internas,1,pessoal,operacional,
+1.9.2,"Cursos, Eventos e Treinamentos",1,pessoal,operacional,
+1.9.3,Fardamento,1,pessoal,operacional,
+1.9.4,Plano de saude/odonto,1,pessoal,operacional,
+1.9.5,Comissao,1,pessoal,operacional,"Duas grafias no Tiny, uma com espaco no fim. A chave por codigo junta as duas."
+2.1,Alugueis,2,sede,operacional,
+2.2,Energia,2,sede,operacional,
+2.3,Telefone / Internet,2,sede,operacional,
+2.4,Agua Mineral,2,sede,operacional,
+2.5,Condominio,2,sede,operacional,
+2.6,Manutencao e Reparo,2,sede,operacional,
+2.7,Computadores e Perifericos,2,equipamentos,investimento,"A CONFIRMAR com o Financeiro: compra de bem duravel e investimento, nao despesa do mes. O Balancete soma no grupo 2."
+2.8,Moveis e Eletronicos,2,equipamentos,investimento,"A CONFIRMAR, mesmo caso do 2.7."
+3.1,Contabilidade,3,servicos_de_apoio,operacional,
+3.2,"Grafica, Publicidade e Marketing",3,servicos_de_apoio,operacional,
+3.3,Advocacia,3,servicos_de_apoio,operacional,
+3.4,Limpeza e Conservacao,3,servicos_de_apoio,operacional,
+3.5,Processamento de Sistemas,3,servicos_de_apoio,operacional,
+3.6,Consultoria e Assessoria Especializada,3,servicos_de_apoio,operacional,
+3.7,Prestador PJ - Demais Casos,3,servicos_de_apoio,operacional,
+3.8,Prestador PF - Demais Casos,3,servicos_de_apoio,operacional,
+3.9,Correios,3,servicos_de_apoio,operacional,
+3.9.1,Fretes Transportadoras,3,servicos_de_apoio,operacional,
+3.9.2,Frete Importacao,3,importacao,importacao,"Frete de mercadoria importada: vai com a importacao, abaixo da linha."
+3.9.3,Ouvidoria,3,servicos_de_apoio,operacional,"Duas grafias no Tiny, uma com espaco no fim."
+4.1,Material de Limpeza,4,gerais,operacional,
+4.2,Material de Escritorio,4,gerais,operacional,
+4.3,Viagens e Representacoes,4,gerais,operacional,
+4.4,Material para Empresa,4,gerais,operacional,
+5.1,Dividendos - socio,5,dividendos,dividendo,"O texto no Tiny traz o nome do socio; por isso o seed e chaveado pelo codigo."
+5.2,Dividendos - socia,5,dividendos,dividendo,"Mesmo caso do 5.1."
+5.3,Fundo Mutuo,5,investimentos,investimento,"Uma conta so, em 2021."
+5.4,Reembolso,5,diretoria,operacional,"Reembolso de compra feita para a empresa (material, cafe, transporte)."
+6.1,Adiantamento Importacao,6,importacao,importacao,
+6.2,Caixas,6,materiais,operacional,
+6.3,Gas Seco,6,materiais,operacional,
+6.4,Locacao de Cilindros,6,materiais,operacional,
+6.5,Material,6,materiais,operacional,
+6.7,Imposto de Importacao,6,importacao,importacao,"Imposto, mas da importacao: vai com ela, nao com o imposto sobre venda."
+6.8,Servicos Aduaneiros,6,importacao,importacao,
+6.9,Espumas,6,materiais,operacional,
+6.9.1,Material N7,6,materiais,operacional,
+7.1,COFINS,7,impostos_sobre_venda,imposto_venda,
+7.2,PIS,7,impostos_sobre_venda,imposto_venda,
+7.3,ISS,7,impostos_sobre_venda,imposto_venda,
+7.4,ICMS,7,impostos_sobre_venda,imposto_venda,
+7.5,IRRF,7,impostos_sobre_venda,imposto_venda,"A CONFIRMAR: IRRF e retencao, nao imposto sobre venda; fica no grupo 7 porque e onde o plano de contas o pos. Ultima conta em 2025."
+7.6,DAS - Parcelado,7,impostos_sobre_venda,imposto_venda,
+7.7,Taxas Diversas,7,impostos_sobre_venda,imposto_venda,"A CONFIRMAR: mistura retencao de contribuicoes, taxa da maquininha e taxas da SEFAZ."
+7.8,ICMS-ST,7,impostos_sobre_venda,imposto_venda,
+8.1,IRPJ,8,impostos_sobre_lucro,imposto_lucro,
+8.3,CSLL,8,impostos_sobre_lucro,imposto_lucro,
+8.4,Taxas Diversas,8,outros_tributos_diretos,imposto_lucro,"A CONFIRMAR: DARF de contribuicoes diversas e taxas municipais. Nao e imposto sobre lucro, mas fica com o grupo 8 para o DRE separar imposto do mesmo jeito que o Balancete."
+8.5,IPVA,8,outros_tributos_diretos,imposto_lucro,"Mesmo caso do 8.4."
+8.6,IPTU,8,outros_tributos_diretos,imposto_lucro,"Mesmo caso do 8.4."
+8.7,Infracao,8,outros_tributos_diretos,imposto_lucro,"Mesmo caso do 8.4."
+8.8,Bombeiros,8,outros_tributos_diretos,imposto_lucro,"Mesmo caso do 8.4."
+9.1,Cartao de Credito,9,cartao,operacional,"A fatura paga despesa de operacao. So aparece no Tiny a partir de set/2026: ver tem_fatura_cartao no dre_mensal."
+9.2,Amortizacao de Emprestimos,9,amortizacao_de_divida,divida,
+9.3,Tarifas Bancarias,9,tarifas_bancarias,financeiro,"As parcelas do Itau lancadas aqui sao reclassificadas pelo seed excecoes_contas_pagar."
+9.8,Consorcio,9,investimentos,investimento,"A CONFIRMAR: consorcio e formacao de patrimonio, nao despesa. Ultima conta em 2023."
+9.9,Incentivos Fiscais,9,impostos_sobre_venda,imposto_venda,"A CONFIRMAR: e o DAE do PRODEPE, contribuicao calculada sobre o ICMS incentivado. O Balancete soma no grupo 9."
+9.9.1,Cartao de Debito,9,cartao,operacional,
+10.4,Despesas de Cartorio,10,outros_custos,operacional,
+10.8,Estornos Vendas,10,outros_custos,operacional,"A CONFIRMAR: estorno de venda e deducao de receita. Ultima conta em 2024."
+10.9,Outros Custos,10,outros_custos,operacional,
+10.9.1,Despesas Importacao,10,importacao,importacao,
+10.9.2,Sindical,10,outros_custos,operacional,
+10.9.3,Reembolso,10,outros_custos,operacional,
+sem,Sem categoria,sem,sem_categoria,operacional,"Conta sem categoria no Tiny. O Balancete soma como SEM CATEGORIA, entao o DRE tambem soma, como despesa operacional."

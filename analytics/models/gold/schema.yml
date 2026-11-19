@@ -402,3 +402,111 @@ models:
       - name: valor_total_recebido
         description: >
           O que de fato entrou, que não é o mesmo que o valor do serviço quando há retenção.
+
+  - name: fato_contas_pagar
+    description: >
+      A despesa, grão de CONTA — base do `dre_mensal`. Quatro papéis da `dim_tempo`
+      (emissão, vencimento, competência, liquidação); o DRE e o Balancete usam a EMISSÃO.
+      Linha do DRE pelo plano de contas (`categoria_dre`) e, por cima, pelas exceções
+      (`excecoes_contas_pagar`). ⚠️ A exceção muda `linha_dre`/`natureza`, nunca
+      `grupo_balancete`. ⚠️ Nada que dependa de "hoje" — atraso corrente e "provisório"
+      são ditos na consulta.
+    columns:
+      - name: sk_conta
+        description: "O grão: uma linha por conta viva (não excluída na origem)."
+        data_tests: [unique, not_null]
+      - name: id_tiny
+        data_tests: [unique, not_null]
+      - name: data_emissao
+        description: >
+          A régua do Balancete e do DRE. ⚠️ O financeiro lança com emissão retroativa, então
+          mês recente cresce depois de fechado.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: data
+      - name: data_vencimento
+        description: >
+          Agenda de caixa. `warn`: há vencimento em 2066, digitado na origem, fora da
+          `dim_tempo` (2015–2030).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: data
+              config:
+                severity: warn
+      - name: data_competencia
+        description: >
+          A que mês a despesa pertence. Não é a régua do DRE. `warn`: há competência no
+          ano 9850 e em 2000, digitação na origem.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: data
+              config:
+                severity: warn
+      - name: data_liquidacao
+        description: Quando o dinheiro saiu. NULL enquanto em aberto.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: data
+              config:
+                severity: warn
+      - name: linha_dre
+        description: >
+          A linha do DRE. NULL só se a categoria não tiver linha no seed — e aí
+          `categoria_do_tiny_sem_linha_no_dre` já derrubou o build.
+        data_tests: [not_null]
+      - name: natureza
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['operacional', 'imposto_venda', 'imposto_lucro', 'financeiro',
+                         'divida', 'dividendo', 'importacao', 'investimento']
+      - name: reclassificada
+        description: A linha veio de `excecoes_contas_pagar`, não do plano de contas.
+        data_tests: [not_null]
+      - name: reclassificacao_confirmada
+        description: >
+          `false` = reclassificação ainda sem o Financeiro (hoje: parcelas do Itaú como
+          dívida). NULL quando a conta não foi reclassificada.
+      - name: estado
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['aberto', 'quitado', 'cancelada']
+
+  - name: dre_mensal
+    description: >
+      O resultado do mês, uma linha por mês de EMISSÃO (a régua do Balancete da tela).
+      Receita = `fato_vendas` + `fato_servicos`, as réguas do painel. `balancete_*` existem
+      para conferência e reproduzem a tela como ela é. ⚠️ `tem_fatura_cartao = false` =
+      despesa subestimada (a fatura só entra no Tiny a partir de set/2026).
+      ⚠️ `valor_reclassificado_nao_confirmado` > 0 = o mês depende de decisão do Financeiro.
+      ⚠️ "Provisório" (mês corrente e anterior) NÃO está aqui: depende de hoje, é dito na
+      consulta. ⚠️ Dívida (amortização) entra acima do resultado, por decisão da spec do Midas.
+    columns:
+      - name: mes
+        description: Primeiro dia do mês de emissão.
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: data
+      - name: tem_fatura_cartao
+        data_tests: [not_null]
+      - name: balancete_sem_impostos
+        description: >
+          A despesa do Balancete fora os grupos 7 e 8 — o número da âncora. Conferido mês a
+          mês e por grupo em `dre_mensal_reconcilia_com_o_balancete`.
+        data_tests: [not_null]

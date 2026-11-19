@@ -261,3 +261,32 @@ models:
       - name: motivo
         description: Rótulo único para revisão, para ninguém ter que ler cinco booleanos.
         data_tests: [not_null]
+
+  - name: stg_contas_pagar
+    description: >
+      Contas a pagar tipadas, base do `fato_contas_pagar` e do `dre_mensal` (o Midas, agente
+      CFO do HS.OS, lê os dois). ⚠️ Conta excluída na origem fica FORA — é a régua do
+      Balancete; manter a excluída e a reemitida dobraria a despesa. ⚠️ `cliente_*` da
+      origem vira `fornecedor_*` aqui: o papel é de fornecedor.
+    columns:
+      - name: id
+        data_tests: [unique, not_null]
+      - name: id_tiny
+        data_tests: [unique, not_null]
+      - name: categoria_codigo
+        description: >
+          O código que abre a categoria (`9.3`), `sem` quando vazia, `texto:<...>` quando
+          tem texto sem número. É a chave do seed `categoria_dre`.
+        data_tests: [not_null]
+      - name: grupo_balancete
+        description: O número antes do primeiro ponto — o grupo do Balancete da tela — ou `sem`.
+        data_tests: [not_null]
+      - name: estado
+        description: >
+          `aberto` (aberto, pendente, parcial), `quitado` (pago) ou `cancelada`. NULL =
+          situação nova na origem, e o `not_null` para o build em vez de classificar no chute.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['aberto', 'quitado', 'cancelada']

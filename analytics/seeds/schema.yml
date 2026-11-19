@@ -1,0 +1,73 @@
+version: 2
+
+# Os dois seeds do DRE (base financeira do Midas). Os seeds anteriores não têm arquivo de
+# propriedades porque o tipo inferido servia; estes precisam: `categoria_codigo` parece
+# número, e inferido como numeric o código `1.10` viraria `1.1` e `9.3` viraria `9.30`,
+# casando com a categoria errada sem erro nenhum.
+
+seeds:
+  - name: categoria_dre
+    description: >
+      Plano de contas do Tiny → linha do DRE. Chave = o código que abre a categoria
+      (`9.3`), não o texto: o texto tem duplicatas que só diferem por um espaço e nome de
+      sócio em duas categorias. ⚠️ Categoria nova no Tiny sem linha aqui QUEBRA o build
+      (`categoria_do_tiny_sem_linha_no_dre`) — de propósito, para não sumir do DRE calada.
+      `observacao` com "A CONFIRMAR" = classificação feita sem o Financeiro.
+    config:
+      column_types:
+        categoria_codigo: varchar
+        rotulo: varchar
+        grupo: varchar
+        linha_dre: varchar
+        natureza: varchar
+        observacao: varchar
+    columns:
+      - name: categoria_codigo
+        data_tests: [unique, not_null]
+      - name: grupo
+        description: >
+          O grupo do Balancete da tela — o número antes do primeiro ponto, ou `sem`. É o
+          que as âncoras conferem por grupo.
+        data_tests: [not_null]
+      - name: linha_dre
+        data_tests: [not_null]
+      - name: natureza
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['operacional', 'imposto_venda', 'imposto_lucro', 'financeiro',
+                         'divida', 'dividendo', 'importacao', 'investimento']
+
+  - name: excecoes_contas_pagar
+    description: >
+      Reclassificação de conta a pagar que o plano de contas põe no lugar errado, por
+      fornecedor + código da categoria + padrão do histórico (ILIKE sobre o histórico
+      normalizado: minúsculo e sem acento). Muda `linha_dre` e `natureza`, NUNCA o grupo:
+      o Balancete continua somando a conta onde o Tiny a pôs. `confirmado = nao` = decisão
+      ainda sem o Financeiro; o fato carrega isso em `reclassificacao_confirmada`.
+    config:
+      column_types:
+        fornecedor: varchar
+        categoria_codigo: varchar
+        padrao_historico: varchar
+        linha_dre: varchar
+        natureza: varchar
+        confirmado: varchar
+        motivo: varchar
+    columns:
+      - name: natureza
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['operacional', 'imposto_venda', 'imposto_lucro', 'financeiro',
+                         'divida', 'dividendo', 'importacao', 'investimento']
+      - name: confirmado
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['sim', 'nao']
+      - name: motivo
+        data_tests: [not_null]

@@ -1,0 +1,2 @@
+fornecedor,categoria_codigo,padrao_historico,linha_dre,natureza,confirmado,motivo
+Itau,9.3,%parcela%,amortizacao_de_divida,divida,nao,"Parcelas de emprestimo (Parcela N/44, Parcela Giro N/57, vencimento ate 2030) lancadas como tarifa bancaria. Na tarifa elas inflam o financeiro do mes do lancamento em bloco (out/2026). Reclassificadas como divida em 2026-11-19, SEM confirmacao do Financeiro: ate confirmar, quem ler o DRE diz que a linha e provisoria."
