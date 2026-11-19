@@ -581,3 +581,69 @@ models:
           mesmo nas parcelas: é a tela. Conferido mês a
           mês e por grupo em `dre_mensal_reconcilia_com_o_balancete`.
         data_tests: [not_null]
+
+  - name: caixa_semanal
+    description: >
+      Caixa projetado das próximas 13 semanas (a corrente e mais 12), uma linha por semana,
+      para a skill `caixa-projetado` do Midas. Entrega o FLUXO; o saldo inicial é da skill.
+      Conhecido (títulos lançados, com a pontualidade e a recuperação medidas) e estimado
+      (ritmo) sempre em colunas separadas. ⚠️ O a pagar é lançado depois de pago: a saída é
+      quase toda ritmo. ⚠️ Importação só entra se lançada. ⚠️ Depende de `current_date`:
+      `data_referencia` diz de quando é. Método no cabeçalho.
+    columns:
+      - name: semana
+        description: 0 = a semana corrente (só da data de referência em diante); 1 a 12, as seguintes.
+        data_tests: [unique, not_null]
+      - name: entrada_a_vencer
+        description: A receber em aberto que vence na semana, pelo valor de face (o `saldo`).
+        data_tests: [not_null]
+      - name: entrada_conhecida
+        description: >
+          `entrada_a_vencer_esperada` + `entrada_vencida_esperada`: o que se espera receber
+          dos títulos já lançados, com a pontualidade e a recuperação medidas no histórico.
+        data_tests: [not_null]
+      - name: entrada_estimada
+        description: Ritmo de recebimento × `participacao_novos` — só a parte de títulos que ainda não existem.
+        data_tests: [not_null]
+      - name: saida_conhecida
+        description: "`saida_parcelas` + `saida_a_pagar_em_aberto` (sem a importação, que tem coluna própria)."
+        data_tests: [not_null]
+      - name: saida_estimada
+        description: >
+          Ritmo de pagamento por chave do plano de contas (26 semanas terminando 9 antes da
+          data, por dia do mês), menos o já lançado em aberto da mesma chave e semana.
+        data_tests: [not_null]
+      - name: fluxo_liquido
+        description: "`entrada_total` − `saida_total`."
+        data_tests: [not_null]
+      - name: fluxo_acumulado
+        description: Soma do `fluxo_liquido` da semana 0 até esta. Somar o saldo bancário inicial dá o saldo projetado.
+        data_tests: [not_null]
+      - name: confianca
+        description: "`alta` (entradas e saídas ≥ 70% conhecidas), `media` (entradas ≥ 40%) ou `baixa`."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['alta', 'media', 'baixa']
+      - name: erro_tipico_entrada_pct
+        description: Erro absoluto médio desta semana do horizonte no backtest, em % do realizado.
+      - name: erro_tipico_saida_pct
+        description: O mesmo para a saída sem importação, só com semanas de realizado completo.
+      - name: fluxo_acumulado_conservador
+        description: >
+          O acumulado com a entrada e a saída corrigidas pelo viés do backtest, só na
+          direção pessimista. Piso para "vamos ter caixa?". Ver o cabeçalho.
+        data_tests: [not_null]
+
+  - name: caixa_semanal_backtest
+    description: >
+      A mesma projeção (macro `caixa_projetado`) rodada como se hoje fosse cada data de
+      `origens`, comparada semana a semana com o realizado por `liquidacao`. ⚠️ Só vale o
+      erro de saída com `saida_realizada_completa` (o a pagar entra no banco até ~60 dias
+      depois de pago) e o de entrada com `entrada_realizada_completa`.
+    columns:
+      - name: data_referencia
+        data_tests: [not_null]
+      - name: semana
+        data_tests: [not_null]
