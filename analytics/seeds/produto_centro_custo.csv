@@ -3,7 +3,7 @@ id_produto,nome,chave_centro_custo,motivo
 612544323,bafometro passivo - iblow 10 pro,BAFÔMETRO PASSIVO - IBLOW 10 PRO,"O iBlow 10 PRO da aba Centro de Custo."
 223536711,bafometro - mark x,BAFÔMETRO - MARK X PLUS,"E o Mark X Plus: a descricao do item nas notas foi BAFÔMETRO - MARK X PLUS ate jan/2026 e virou BAFÔMETRO - MARK X depois, no mesmo id. O preco_custo do cadastro e exatamente o custo que a aba calcula para o Mark X Plus."
 222765628,kit bafometro - mark x plus com impressora,,"Kit = aparelho + impressora. Ligado a chave do aparelho, perderia o custo da impressora; fica com o custo do cadastro."
-613665866,bafometro phoebus pro c/ tampa,,"Phoebus Pro: outro modelo, sem linha no Centro de Custo e sem custo no cadastro. Fica sem CMV ate alguem configurar."
+613665866,bafometro phoebus pro c/ tampa,BAFÔMETRO PHOEBUS,"Mesmo custo do Phoebus, por decisão do Erick (19/11/2026); não tem linha própria no Centro de Custo."
 470956724,bafometro passivo - iblow 10,,"iBlow 10, modelo anterior ao 10 PRO (vendido ate 2024). Nao e o produto da aba."
 609888079,bafometro passivo - iblow 10 d,,"iBlow 10 D, modelo anterior ao 10 PRO. Nao e o produto da aba."
 592144046,bafometro passivo - iblow c,,"iBlow C, outro modelo. Nao e o produto da aba."
