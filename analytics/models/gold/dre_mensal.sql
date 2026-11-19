@@ -1,6 +1,7 @@
 {#
-  `dre_mensal` — o resultado do mês, uma linha por mês de EMISSÃO. É o que a skill
-  `resultado-mensal` do Midas (agente CFO do HS.OS) lê.
+  `dre_mensal` — o resultado do mês, uma linha por mês do DRE (`fato_contas_pagar.mes_dre`):
+  o mês de EMISSÃO, exceto parcela de parcelamento, que vai para o mês do VENCIMENTO. É o
+  que a skill `resultado-mensal` do Midas (agente CFO do HS.OS) lê.
 
   ## Por que emissão
 
@@ -8,6 +9,28 @@
   autoridade de custo. Um DRE por competência ao lado de um Balancete por emissão seriam
   dois "custos de outubro" que não batem, e quem lê não tem como saber qual vale. A
   competência está no `fato_contas_pagar` para quando alguém quiser.
+
+  ## A exceção: parcelamento vai para o mês da parcela
+
+  Parcelamento de dívida ou de imposto entra no Tiny de uma vez, com a emissão no dia do
+  lançamento e os vencimentos espalhados por anos. Por emissão, out/2026 recebia de uma vez
+  as parcelas da dívida do Itaú até 2030 e de três parcelamentos de imposto até 2031. Por
+  isso, **parcela de parcelamento (dívida e imposto) entra no mês do VENCIMENTO**; todo o
+  resto continua na emissão. A regra, e por que é por lote, 60 dias, só dívida e imposto e
+  vencimento em vez de competência, está no cabeçalho do `fato_contas_pagar`, que é onde
+  `mes_dre` nasce.
+
+  - A **despesa operacional nunca muda de mês**: a regra não alcança o lançamento
+    retroativo (conta lançada já paga com emissão retroativa), que é o motivo de o DRE ser
+    por emissão.
+  - As colunas **`balancete_*` continuam por EMISSÃO** — são a tela, e a tela não mudou.
+    Em mês com parcelamento, `balancete_total` e a despesa do DRE deixam de bater, e é para
+    ser assim.
+  - **Meses futuros existem**: a janela vai até a última parcela agendada (2031). Mês sem
+    nenhum lançamento — só parcelas que ainda vão vencer — tem `mes_lancado = false`, e
+    quem lê o "resultado do mês" filtra por ele (e pela data de referência da consulta).
+  - `dre_mensal_sem_parcela_fora_do_mes` tranca o caso: nenhuma conta de dívida ou imposto
+    conta num mês do DRE vencendo mais de 60 dias depois dele.
 
   ## As réguas que já existem não são refeitas aqui
 
@@ -22,13 +45,18 @@
       receita bruta (vendas + serviços)
     − impostos sobre venda                        → receita líquida
     − despesas operacionais, por grupo            → resultado operacional
-    − financeiro (tarifas) − dívida (amortização)
+    − financeiro (tarifas)
     − impostos sobre lucro                        → resultado
+    − dívida (amortização)                        → resultado_apos_divida
       abaixo da linha: importação, dividendos, investimento
 
-  ⚠️ **Dívida entra acima do resultado** porque é o que a especificação do Midas pede (é
-  saída de caixa que compete com o resultado). Contabilmente, amortização de principal não
-  é despesa — quem quiser o resultado contábil soma `amortizacao_de_divida` de volta.
+  **Dívida fica fora do `resultado`** (corrigido em 2026-11-19 — a 1ª versão a punha acima,
+  a pedido da spec do Midas, e isso estava errado): amortização de principal não é despesa.
+  Ela continua em `amortizacao_de_divida`, que o Midas usa como saída de caixa, e
+  `resultado_apos_divida` = `resultado` − `amortizacao_de_divida`, para quem quer saber o
+  que sobra depois de pagar o banco. ⚠️ Juros: o Tiny lança a parcela inteira (principal +
+  juros) numa conta só; não há como separar aqui, e `despesa_financeira` só tem o que foi
+  lançado como tarifa. A parcela inteira está em `amortizacao_de_divida`.
 
   ⚠️ **Só tem despesa o que está no contas a pagar.** Não há receita financeira, e o grupo
   1 é pessoal parcial (encargos e retenções que o Tiny não registra ficam de fora).
@@ -55,10 +83,20 @@
 
 with contas as (
 
-    select
-        date_trunc('month', data_emissao)::date as mes,
-        *
+    select mes_dre as mes, *
     from {{ ref('fato_contas_pagar') }}
+
+),
+
+-- O Balancete é por EMISSÃO, sempre — inclusive nas parcelas. Por isso é agrupado à parte.
+balancete as (
+
+    select
+        date_trunc('month', data_emissao)::date                     as mes,
+        sum(valor)                                                  as balancete_total,
+        sum(valor) filter (where grupo_balancete not in ('7', '8')) as balancete_sem_impostos
+    from {{ ref('fato_contas_pagar') }}
+    group by 1
 
 ),
 
@@ -80,15 +118,27 @@ servicos as (
 
 -- Todo mês entre o primeiro e o último movimento existe, tenha havido algo ou não: mês
 -- sem linha some do gráfico em vez de aparecer como zero. A janela sai dos dados, não de
--- `current_date`, para o modelo não mudar de forma conforme o dia do build.
+-- `current_date`, para o modelo não mudar de forma conforme o dia do build. Vai até a
+-- última parcela agendada — ver `mes_lancado`.
 janela as (
 
     select min(mes) as inicio, max(mes) as fim
     from (
         select mes from contas
+        union all select mes from balancete
         union all select mes from vendas
         union all select mes from servicos
     ) m
+
+),
+
+-- Mês em que algo foi LANÇADO: houve venda, serviço ou conta emitida. Mês futuro só com
+-- parcela agendada não entra.
+lancados as (
+
+    select mes from balancete
+    union select mes from vendas
+    union select mes from servicos
 
 ),
 
@@ -133,12 +183,9 @@ despesa as (
         sum(valor) filter (where not cancelada and reclassificada and not reclassificacao_confirmada)
                                                                                 as valor_reclassificado_nao_confirmado,
         count(*)                                                                as qtd_contas,
-
-        -- ------------------------------------------------- conferência com a tela
-        -- A régua do Balancete, sem mexer em nada: todo o contas a pagar vivo, por
-        -- emissão, grupo = número que abre a categoria. "Sem impostos" = fora 7 e 8.
-        sum(valor)                                                              as balancete_total,
-        sum(valor) filter (where grupo_balancete not in ('7', '8'))             as balancete_sem_impostos
+        count(*) filter (where parcela_de_parcelamento)                         as qtd_parcelas,
+        coalesce(sum(valor) filter (where not cancelada and parcela_de_parcelamento), 0)
+                                                                                as valor_parcelas
 
     from contas
     group by 1
@@ -179,13 +226,18 @@ montado as (
         coalesce(d.tem_fatura_cartao, false)                            as tem_fatura_cartao,
         coalesce(d.valor_reclassificado_nao_confirmado, 0)              as valor_reclassificado_nao_confirmado,
         coalesce(d.qtd_contas, 0)                                       as qtd_contas,
-        coalesce(d.balancete_total, 0)                                  as balancete_total,
-        coalesce(d.balancete_sem_impostos, 0)                           as balancete_sem_impostos
+        coalesce(d.qtd_parcelas, 0)                                     as qtd_parcelas,
+        coalesce(d.valor_parcelas, 0)                                   as valor_parcelas,
+        l.mes is not null                                               as mes_lancado,
+        coalesce(b.balancete_total, 0)                                  as balancete_total,
+        coalesce(b.balancete_sem_impostos, 0)                           as balancete_sem_impostos
 
     from meses m
-    left join vendas   v on v.mes = m.mes
-    left join servicos s on s.mes = m.mes
-    left join despesa  d on d.mes = m.mes
+    left join vendas    v on v.mes = m.mes
+    left join servicos  s on s.mes = m.mes
+    left join despesa   d on d.mes = m.mes
+    left join balancete b on b.mes = m.mes
+    left join lancados  l on l.mes = m.mes
 
 )
 
@@ -213,11 +265,15 @@ select
     receita_bruta - impostos_sobre_venda - despesa_operacional          as resultado_operacional,
 
     despesa_financeira,
-    amortizacao_de_divida,
     impostos_sobre_lucro,
     receita_bruta - impostos_sobre_venda - despesa_operacional
-        - despesa_financeira - amortizacao_de_divida - impostos_sobre_lucro
-                                                                        as resultado,
+        - despesa_financeira - impostos_sobre_lucro                     as resultado,
+
+    -- dívida: fora do resultado (principal não é despesa), mas é saída de caixa
+    amortizacao_de_divida,
+    receita_bruta - impostos_sobre_venda - despesa_operacional
+        - despesa_financeira - impostos_sobre_lucro - amortizacao_de_divida
+                                                                        as resultado_apos_divida,
 
     -- abaixo da linha
     importacao,
@@ -225,11 +281,14 @@ select
     investimento,
 
     -- qualidade
+    mes_lancado,
     tem_fatura_cartao,
     valor_reclassificado_nao_confirmado,
     qtd_contas,
+    qtd_parcelas,
+    valor_parcelas,
 
-    -- conferência com o Balancete da tela
+    -- conferência com o Balancete da tela (por EMISSÃO)
     balancete_total,
     balancete_sem_impostos
 

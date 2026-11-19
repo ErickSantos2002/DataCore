@@ -4,7 +4,7 @@ models:
 
   - name: dim_tempo
     description: >
-      Dimensão de tempo gerada (5.1), de 2015 a 2030 — 5.844 dias. Gerada e não extraída
+      Dimensão de tempo gerada (5.1), de 2015 a 2035 — 7.670 dias. Gerada e não extraída
       porque dimensão tirada dos fatos só tem os dias em que houve movimento: o mês sem
       venda some do gráfico em vez de aparecer como zero. Feriado móvel é CALCULADO a
       partir da Páscoa, não listado à mão.
@@ -429,8 +429,8 @@ models:
                 field: data
       - name: data_vencimento
         description: >
-          Agenda de caixa. `warn`: há vencimento em 2066, digitado na origem, fora da
-          `dim_tempo` (2015–2030).
+          Agenda de caixa, e o mês do DRE da parcela de parcelamento (ver `mes_dre`).
+          `warn`: há vencimento em 2066, digitado na origem, fora da `dim_tempo` (2015–2035).
         data_tests:
           - not_null
           - relationships:
@@ -450,6 +450,22 @@ models:
                 field: data
               config:
                 severity: warn
+      - name: mes_dre
+        description: >
+          O mês em que a conta entra no `dre_mensal`: o da EMISSÃO, exceto parcela de
+          parcelamento (`parcela_de_parcelamento`), que vai para o do VENCIMENTO. Regra e
+          porquê no cabeçalho do modelo. O Balancete continua por `data_emissao`.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: data
+      - name: parcela_de_parcelamento
+        description: >
+          Dívida ou imposto num lote (fornecedor + código + emissão) de 2+ contas com alguma
+          vencendo mais de 60 dias depois da emissão. Despesa operacional nunca é.
+        data_tests: [not_null]
       - name: data_liquidacao
         description: Quando o dinheiro saiu. NULL enquanto em aberto.
         data_tests:
@@ -486,16 +502,20 @@ models:
 
   - name: dre_mensal
     description: >
-      O resultado do mês, uma linha por mês de EMISSÃO (a régua do Balancete da tela).
+      O resultado do mês, uma linha por mês do DRE: o de EMISSÃO (a régua do Balancete da
+      tela), exceto parcela de parcelamento de dívida e imposto, que entra no mês do
+      VENCIMENTO (`fato_contas_pagar.mes_dre`).
       Receita = `fato_vendas` + `fato_servicos`, as réguas do painel. `balancete_*` existem
       para conferência e reproduzem a tela como ela é. ⚠️ `tem_fatura_cartao = false` =
       despesa subestimada (a fatura só entra no Tiny a partir de set/2026).
       ⚠️ `valor_reclassificado_nao_confirmado` > 0 = o mês depende de decisão do Financeiro.
       ⚠️ "Provisório" (mês corrente e anterior) NÃO está aqui: depende de hoje, é dito na
-      consulta. ⚠️ Dívida (amortização) entra acima do resultado, por decisão da spec do Midas.
+      consulta. ⚠️ Dívida (amortização) fica FORA do `resultado` (principal não é despesa);
+      `resultado_apos_divida` a desconta. ⚠️ Há meses futuros, só com parcelas agendadas:
+      `mes_lancado = false`.
     columns:
       - name: mes
-        description: Primeiro dia do mês de emissão.
+        description: Primeiro dia do mês do DRE (`fato_contas_pagar.mes_dre`).
         data_tests:
           - unique
           - not_null
@@ -505,8 +525,22 @@ models:
                 field: data
       - name: tem_fatura_cartao
         data_tests: [not_null]
+      - name: mes_lancado
+        description: >
+          Houve venda, serviço ou conta emitida no mês. `false` = mês futuro só com parcelas
+          agendadas — não é "o resultado do mês" de ninguém ainda.
+        data_tests: [not_null]
+      - name: resultado
+        description: >
+          Receita bruta − impostos sobre venda − despesa operacional − financeiro − impostos
+          sobre lucro. SEM a dívida: amortização de principal não é despesa.
+        data_tests: [not_null]
+      - name: resultado_apos_divida
+        description: "`resultado` − `amortizacao_de_divida`: o que sobra depois de pagar o banco."
+        data_tests: [not_null]
       - name: balancete_sem_impostos
         description: >
-          A despesa do Balancete fora os grupos 7 e 8 — o número da âncora. Conferido mês a
+          A despesa do Balancete fora os grupos 7 e 8 — o número da âncora. Por EMISSÃO,
+          mesmo nas parcelas: é a tela. Conferido mês a
           mês e por grupo em `dre_mensal_reconcilia_com_o_balancete`.
         data_tests: [not_null]

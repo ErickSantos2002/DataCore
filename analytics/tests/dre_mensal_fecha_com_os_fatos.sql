@@ -2,7 +2,7 @@
   O `dre_mensal` não perde nem inventa dinheiro.
 
   1. Despesa: a soma de todas as linhas do DRE (operacional, impostos, financeiro,
-     dívida, abaixo da linha) é o contas a pagar do mês menos as canceladas. Se uma
+     dívida, abaixo da linha) é o contas a pagar do mês (`mes_dre`) menos as canceladas. Se uma
      natureza nova entrar no seed sem coluna no DRE, ela some daqui — e é isto que acusa.
   2. Receita: o total de `receita_bruta` é o de `fato_vendas` + `fato_servicos`. Mês
      fora da janela do DRE ou junção errada aparece como diferença.
@@ -31,7 +31,7 @@ with dre as (
 
 fato as (
 
-    select date_trunc('month', data_emissao)::date as mes,
+    select mes_dre as mes,
            sum(valor) filter (where not cancelada) as despesa
     from {{ ref('fato_contas_pagar') }}
     group by 1

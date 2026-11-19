@@ -6,10 +6,11 @@
   ("caiu para zero" vira "sumiu do gráfico"). Aqui todo dia existe, tenha acontecido algo
   ou não.
 
-  **Cobertura: 2015 a 2030.** 2015 porque é onde a empresa começa — a primeira NF-e é de
+  **Cobertura: 2015 a 2035.** 2015 porque é onde a empresa começa — a primeira NF-e é de
   2015-01-08 e a primeira NFS-e de 2015-01-05, e as contas a receber recuperadas no item
-  0.15 chegam até lá. 2030 dá folga para vencimento futuro (há contas com vencimento em
-  2027) sem inchar a tabela: são ~5.800 linhas.
+  0.15 chegam até lá. 2035 dá folga para vencimento futuro sem inchar a tabela (~7.700
+  linhas): era 2030 até 2026-11-19, quando os parcelamentos de imposto lançados em out/2026
+  passaram a vencer até 2031 e o `dre_mensal` passou a pôr parcela no mês do vencimento.
 
   ## Feriado é calculado, não listado
 
@@ -56,7 +57,7 @@ with dias as (
 
     select generate_series(
         date '2015-01-01',
-        date '2030-12-31',
+        date '2035-12-31',
         interval '1 day'
     )::date as data
 
